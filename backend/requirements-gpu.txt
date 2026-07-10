@@ -8,6 +8,10 @@ diffusers>=0.35,<0.36  # 0.35 = first with Wan2.2; newer registers attention cus
 transformers>=4.46,<4.58  # fish-speech v2 caps at 4.57.3
 accelerate>=1.0
 safetensors>=0.4
+# fish-speech's transitive deps downgrade protobuf below 3.20 (missing the
+# `builder` module transformers/diffusers need); upstream forces the same
+# floor via uv overrides, which pip ignores.
+protobuf>=3.20.3,<5
 
 # Audio
 soundfile>=0.12
