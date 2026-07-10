@@ -76,8 +76,7 @@ RUN git clone --depth 1 --branch ${FISH_SPEECH_REF} \
     # fish-speech modules call pyrootutils.setup_root(indicator='.project-root')
     # at import time, walking up from the installed package and expecting its
     # repo checkout; give site-packages the marker so imports work installed.
-    && python3.11 -c "import fish_speech, pathlib; \
-(pathlib.Path(fish_speech.__file__).parent.parent / '.project-root').touch()"
+    && touch /usr/local/lib/python3.11/dist-packages/.project-root
 
 # Pre-cache the S3FD face-detector weights MuseTalk's bundled face_detection
 # fetches on first use — adrianbulat.com is slow/flaky, so don't let the first
