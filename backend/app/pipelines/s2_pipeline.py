@@ -255,8 +255,9 @@ class S2Pipeline(ManagedPipeline):
             if not segments:
                 raise RuntimeError("S2 produced no audio tokens for a text chunk")
             codes = torch.cat(segments, dim=1)
-            decoded = self._decoder.decode(codes[None].to(self._device))
-            # decode returns (audios, audio_lengths) with audios (B, 1, time).
+            # from_indices dequantizes (B, codebooks, time) integer codes and
+            # decodes to audio (B, 1, time); decode() alone expects latents.
+            decoded = self._decoder.from_indices(codes[None].to(self._device))
             if isinstance(decoded, (tuple, list)):
                 decoded = decoded[0]
             waveform = decoded[0]
