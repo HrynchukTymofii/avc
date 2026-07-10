@@ -90,6 +90,14 @@ COPY requirements.txt requirements-gpu.txt ./
 # with MuseTalk's older pins (see README troubleshooting).
 RUN python3.11 -m pip install -r requirements-gpu.txt
 
+# fish-speech drags in a FlashAttention-3 build that (a) targets Hopper GPUs,
+# not the L40S, and (b) crashes diffusers' import-time custom-op registration
+# on torch 2.4. Nothing in this stack uses it — remove whatever provides it.
+RUN python3.11 -c "import importlib.metadata as md, subprocess, sys; \
+mods = md.packages_distributions(); \
+dists = sorted({d for m in ('flash_attn_interface', 'flash_attn', 'flash_attn_3') for d in mods.get(m, [])}); \
+subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y'] + dists) if dists else print('no flash-attn packages found')"
+
 # MuseTalk resolves paths relative to the working directory and imports its
 # bundled face_detection package as a top-level module:
 #   ./musetalk/utils/dwpose/*.py           -> config shipped in the repo (symlink)
@@ -106,6 +114,7 @@ import mmcv.ops; \
 from mmpose.apis import init_model; \
 init_model('/opt/MuseTalk/musetalk/utils/dwpose/rtmpose-l_8xb32-270e_coco-ubody-wholebody-384x288.py', None, device='cpu'); \
 import face_detection; \
+from diffusers import AutoencoderKL; \
 from fish_speech.models.dac.inference import load_model; \
 from fish_speech.models.text2semantic.inference import init_model as _im, generate_long; \
 print('dependency smoke test: ok')"
