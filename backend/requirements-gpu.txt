@@ -4,7 +4,7 @@
 # checkouts there as well (MuseTalk is not packaged for pip).
 -r requirements.txt
 
-diffusers>=0.35
+diffusers>=0.35,<0.36  # 0.35 = first with Wan2.2; newer registers attention custom-ops torch 2.4 can't parse
 transformers>=4.46,<4.58  # fish-speech v2 caps at 4.57.3
 accelerate>=1.0
 safetensors>=0.4
