@@ -220,7 +220,12 @@ class S2Pipeline(ManagedPipeline):
         if sample_rate != target_rate:
             audio = torchaudio.functional.resample(audio, sample_rate, target_rate)
         with torch.inference_mode():
-            tokens = self._decoder.encode(audio.to(self._device)[None])[0]
+            encoded = self._decoder.encode(audio.to(self._device)[None])
+        # encode returns (indices, feature_lengths); generate_long expects each
+        # prompt token tensor as 2D (num_codebooks, time), no batch dim.
+        if isinstance(encoded, (tuple, list)):
+            encoded = encoded[0]
+        tokens = encoded[0] if encoded.ndim == 3 else encoded
         self._reference_cache[cache_key] = tokens
         return tokens, reference_text or ""
 
@@ -250,11 +255,15 @@ class S2Pipeline(ManagedPipeline):
             if not segments:
                 raise RuntimeError("S2 produced no audio tokens for a text chunk")
             codes = torch.cat(segments, dim=1)
-            waveform = self._decoder.decode(codes[None].to(self._device))[0]
+            decoded = self._decoder.decode(codes[None].to(self._device))
+            # decode returns (audios, audio_lengths) with audios (B, 1, time).
+            if isinstance(decoded, (tuple, list)):
+                decoded = decoded[0]
+            waveform = decoded[0]
 
         waveform = waveform.float().cpu()
         if self._decoder.sample_rate != _OUTPUT_SAMPLE_RATE:
             waveform = torchaudio.functional.resample(
                 waveform, self._decoder.sample_rate, _OUTPUT_SAMPLE_RATE
             )
-        return waveform.squeeze(0).numpy()
+        return waveform.flatten().numpy()
