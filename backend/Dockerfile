@@ -8,8 +8,8 @@
 #   torch 2.4.1+cu121  — newest torch with prebuilt mmcv wheels; this runtime
 #                        image has no nvcc, so mmcv must never build from source
 #   mmcv 2.2.0         — prebuilt wheel from download.openmmlab.com/mmcv/dist/cu121/torch2.4
-#   mmpose 1.3.2       — accepts mmcv <=3.0.0; mmdet is NOT installed (MuseTalk
-#                        only uses mmpose/DWPose, and mmdet would reject mmcv 2.2.0)
+#   mmpose 1.3.2       — accepts mmcv <=3.0.0; its model registry imports mmdet
+#   mmdet 3.3.0        — import-time mmcv ceiling widened by one sed below
 #   fish-speech v2.0.0-beta — upstream pins torch==2.8.0 out of convenience; its
 #                        inference code uses no 2.8-only APIs, so the pin is
 #                        relaxed at build time instead of replacing our torch
@@ -57,7 +57,13 @@ RUN git clone --depth 1 --branch ${MUSETALK_REF} \
     # setup.py that imports pip and breaks under build isolation — install it
     # against the real environment first so mmpose sees it satisfied.
     && python3.11 -m pip install --no-build-isolation "chumpy==0.70" \
-    && python3.11 -m mim install mmengine "mmcv==2.2.0" "mmpose==1.3.2"
+    && python3.11 -m mim install mmengine "mmcv==2.2.0" "mmdet==3.3.0" "mmpose==1.3.2" \
+    # mmpose's model registry imports mmdet at import time, and mmdet 3.3.0
+    # predates mmcv 2.2.0 so its import-time version assert rejects it —
+    # stale ceiling, the combination works; widen it.
+    && sed -i "s/mmcv_maximum_version = '2.2.0'/mmcv_maximum_version = '2.3.0'/" \
+        /usr/local/lib/python3.11/dist-packages/mmdet/__init__.py \
+    && grep -q "mmcv_maximum_version = '2.3.0'" /usr/local/lib/python3.11/dist-packages/mmdet/__init__.py
 
 # fish-speech (S2 Pro inference): relax the torch pin to the version installed
 # above (see version matrix), then install from the patched checkout.
