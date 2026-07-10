@@ -47,16 +47,19 @@ class QueuedStatus(BaseModel):
 
 
 class ProcessingStatus(BaseModel):
+    # `audio` appears mid-job once the voice track exists (talking-head jobs
+    # publish it after the TTS stage so the UI can offer it during lip-sync).
     status: Literal["processing"] = "processing"
     progress: int = Field(ge=0, le=100)
     stage: str
+    audio: str | None = None
 
 
 class FinishedStatus(BaseModel):
-    # `audio` is talking-head only; routes serialize with exclude_none so B-roll
-    # responses omit the key entirely rather than sending null.
+    # `audio` is talking-head only; `video` is absent for voice-only jobs.
+    # Routes serialize with exclude_none so absent keys are omitted, not null.
     status: Literal["finished"] = "finished"
-    video: str
+    video: str | None = None
     audio: str | None = None
 
 

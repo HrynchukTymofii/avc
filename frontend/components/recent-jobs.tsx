@@ -64,6 +64,13 @@ export function RecentJobs({ kind, refreshKey = 0 }: RecentJobsProps) {
                 playsInline
                 className="aspect-video w-full bg-black"
               />
+            ) : job.status === "finished" && job.audio ? (
+              <div className="flex aspect-video flex-col items-center justify-center gap-3 bg-black/30 px-4">
+                <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+                  voice only
+                </span>
+                <audio src={job.audio} controls className="w-full" />
+              </div>
             ) : (
               <div className="flex aspect-video items-center justify-center bg-black/30">
                 <StatusBadge status={job.status} />

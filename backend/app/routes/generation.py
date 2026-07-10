@@ -31,28 +31,37 @@ async def create_talking_head(
     settings: Annotated[Settings, Depends(get_settings_dep)],
     worker: Annotated[GPUWorker, Depends(get_worker)],
     voices: Annotated[VoiceRegistry, Depends(get_voices)],
-    avatar: Annotated[UploadFile, File()],
     script: Annotated[str, Form()],
     voice: Annotated[str, Form()],
+    avatar: Annotated[UploadFile | None, File()] = None,
+    voice_only: Annotated[bool, Form()] = False,
 ) -> JobCreatedResponse:
     script = validate_text(script, field="script", max_chars=settings.max_script_chars)
     if voices.get(voice) is None:
         raise InputValidationError(
             f"unknown voice {voice!r} — see /api/voices for available voices"
         )
-    image_bytes, extension = await read_image_upload(
-        avatar, max_bytes=settings.max_upload_bytes, field="avatar"
-    )
 
     job_id = new_job_id()
-    avatar_path = settings.outputs_dir / job_id / "inputs" / f"avatar{extension}"
-    avatar_path.parent.mkdir(parents=True, exist_ok=True)
-    avatar_path.write_bytes(image_bytes)
+    avatar_path = None
+    if not voice_only:
+        if avatar is None or not (avatar.filename or avatar.size):
+            raise InputValidationError(
+                "avatar image is required unless voice_only is set"
+            )
+        image_bytes, extension = await read_image_upload(
+            avatar, max_bytes=settings.max_upload_bytes, field="avatar"
+        )
+        avatar_path = settings.outputs_dir / job_id / "inputs" / f"avatar{extension}"
+        avatar_path.parent.mkdir(parents=True, exist_ok=True)
+        avatar_path.write_bytes(image_bytes)
 
     job = Job(
         id=job_id,
         kind=JobKind.TALKING_HEAD,
-        params=TalkingHeadParams(avatar_path=avatar_path, script=script, voice_id=voice),
+        params=TalkingHeadParams(
+            avatar_path=avatar_path, script=script, voice_id=voice, voice_only=voice_only
+        ),
         label=_label(script),
     )
     await worker.submit(job)

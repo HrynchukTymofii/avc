@@ -47,6 +47,10 @@ class TalkingHeadProcessor:
         raw_video_path = job_dir / "lipsync_raw.mp4"
         final_path = job_dir / "output.mp4"
 
+        # Voice-only jobs spend their whole budget on TTS; full jobs hand off
+        # to lip-sync at _TTS_END.
+        tts_end = 95 if params.voice_only else _TTS_END
+
         report(_TTS_START, "tts")
         async with self._manager.acquire("s2") as s2:
             await asyncio.to_thread(
@@ -55,10 +59,22 @@ class TalkingHeadProcessor:
                 reference_audio=voice.ref_audio,
                 out_path=speech_path,
                 on_progress=lambda f: report(
-                    _TTS_START + int(f * (_TTS_END - _TTS_START)), "tts"
+                    _TTS_START + int(f * (tts_end - _TTS_START)), "tts"
                 ),
                 reference_text=voice.ref_text,
             )
+
+        # Publish the voice track as soon as it exists so the UI can offer the
+        # WAV while lip-sync is still running. Safe: process() runs on the
+        # event loop and this Job is the store's live record; the next progress
+        # update persists it.
+        audio_url = f"/outputs/{job.id}/speech.wav"
+        job.outputs["audio"] = audio_url
+
+        if params.voice_only:
+            return {"audio": audio_url}
+        if params.avatar_path is None:
+            raise ValueError("avatar image is required for video generation")
 
         report(_TTS_END, "lip-sync")
         async with self._manager.acquire("musetalk") as musetalk:
@@ -78,5 +94,5 @@ class TalkingHeadProcessor:
 
         return {
             "video": f"/outputs/{job.id}/output.mp4",
-            "audio": f"/outputs/{job.id}/speech.wav",
+            "audio": audio_url,
         }

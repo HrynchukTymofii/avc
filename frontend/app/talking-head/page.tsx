@@ -22,6 +22,7 @@ import type { Voice } from "@/types/api";
 
 export default function TalkingHeadPage() {
   const [avatar, setAvatar] = useState<File | null>(null);
+  const [voiceOnly, setVoiceOnly] = useState(false);
   const [script, setScript] = useState("");
   const [voices, setVoices] = useState<Voice[] | null>(null);
   const [voice, setVoice] = useState<string>("");
@@ -50,12 +51,14 @@ export default function TalkingHeadPage() {
     }
   }, [jobId, status]);
 
+  const canSubmit = (voiceOnly || avatar !== null) && script.trim() !== "" && voice !== "";
+
   const handleSubmit = async () => {
-    if (!avatar || !script.trim() || !voice) return;
+    if (!canSubmit) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const response = await submitTalkingHead({ avatar, script, voice });
+      const response = await submitTalkingHead({ avatar, script, voice, voiceOnly });
       setJobId(response.jobId);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Submission failed");
@@ -84,11 +87,26 @@ export default function TalkingHeadPage() {
         <div className="animate-fade-up space-y-5" style={{ "--delay": "0.08s" } as React.CSSProperties}>
           <FileDropzone
             label="Avatar"
-            hint="PNG / JPEG · clear front-facing portrait"
+            hint={
+              voiceOnly
+                ? "Not needed — voice only"
+                : "PNG / JPEG · clear front-facing portrait"
+            }
             file={avatar}
             onChange={setAvatar}
-            disabled={busy}
+            disabled={busy || voiceOnly}
           />
+
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={voiceOnly}
+              onChange={(event) => setVoiceOnly(event.target.checked)}
+              disabled={busy}
+              className="size-4 accent-primary"
+            />
+            Voice only — skip the video, just synthesize the narration
+          </label>
 
           <div className="space-y-1.5">
             <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
@@ -157,17 +175,45 @@ export default function TalkingHeadPage() {
             size="lg"
             className="w-full font-mono uppercase tracking-widest"
             onClick={handleSubmit}
-            disabled={busy || !avatar || !script.trim() || !voice}
+            disabled={busy || !canSubmit}
           >
-            {busy ? "Generating…" : "Generate video"}
+            {busy ? "Generating…" : voiceOnly ? "Generate voice" : "Generate video"}
           </Button>
         </div>
 
         <div className="animate-fade-up space-y-4" style={{ "--delay": "0.16s" } as React.CSSProperties}>
           <JobProgress status={status} />
+          {status?.status === "processing" && status.audio && (
+            <div className="animate-fade-up rounded-lg border bg-card p-3">
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+                Voice track ready — video still rendering
+              </p>
+              <audio src={status.audio} controls className="w-full" />
+              <Button
+                size="sm"
+                variant="secondary"
+                className="mt-2"
+                render={<a href={status.audio} download />}
+              >
+                Download audio
+              </Button>
+            </div>
+          )}
           {status?.status === "finished" && (
             <>
-              <VideoPreview video={status.video} audio={status.audio} />
+              {status.video ? (
+                <VideoPreview video={status.video} audio={status.audio} />
+              ) : status.audio ? (
+                <div className="animate-fade-up rounded-lg border bg-card p-3">
+                  <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Voice track
+                  </p>
+                  <audio src={status.audio} controls className="w-full" />
+                  <Button className="mt-2" render={<a href={status.audio} download />}>
+                    Download audio
+                  </Button>
+                </div>
+              ) : null}
               <Button variant="secondary" onClick={reset} className="w-full">
                 New generation
               </Button>

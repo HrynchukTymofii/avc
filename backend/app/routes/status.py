@@ -27,9 +27,13 @@ def _status_for(job: Job, store: JobStore) -> StatusResponse:
     if job.state is JobState.QUEUED:
         return QueuedStatus(position=store.queued_position(job.id) or 1)
     if job.state is JobState.PROCESSING:
-        return ProcessingStatus(progress=job.progress, stage=job.stage or "starting")
+        return ProcessingStatus(
+            progress=job.progress,
+            stage=job.stage or "starting",
+            audio=job.outputs.get("audio"),
+        )
     if job.state is JobState.FINISHED:
-        return FinishedStatus(video=job.outputs["video"], audio=job.outputs.get("audio"))
+        return FinishedStatus(video=job.outputs.get("video"), audio=job.outputs.get("audio"))
     return FailedStatus(error=job.error or "Unknown error")
 
 

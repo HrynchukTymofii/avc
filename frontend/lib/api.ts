@@ -37,14 +37,16 @@ async function handle<T>(response: Response): Promise<T> {
 }
 
 export async function submitTalkingHead(input: {
-  avatar: File;
+  avatar: File | null;
   script: string;
   voice: string;
+  voiceOnly?: boolean;
 }): Promise<JobCreatedResponse> {
   const form = new FormData();
-  form.append("avatar", input.avatar);
+  if (input.avatar) form.append("avatar", input.avatar);
   form.append("script", input.script);
   form.append("voice", input.voice);
+  if (input.voiceOnly) form.append("voice_only", "true");
   return handle(await fetch("/api/talking-head", { method: "POST", body: form }));
 }
 

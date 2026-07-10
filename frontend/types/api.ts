@@ -23,8 +23,8 @@ export function stageLabel(stage: string): string {
 /** Discriminated on `status` — switch statements narrow exhaustively. */
 export type JobStatus =
   | { status: "queued"; position: number }
-  | { status: "processing"; progress: number; stage: string }
-  | { status: "finished"; video: string; audio?: string }
+  | { status: "processing"; progress: number; stage: string; audio?: string }
+  | { status: "finished"; video?: string; audio?: string }
   | { status: "failed"; error: string };
 
 export interface JobSummary {

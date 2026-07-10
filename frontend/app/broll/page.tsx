@@ -147,7 +147,7 @@ export default function BrollPage() {
 
         <div className="animate-fade-up space-y-4" style={{ "--delay": "0.16s" } as React.CSSProperties}>
           <JobProgress status={status} />
-          {status?.status === "finished" && (
+          {status?.status === "finished" && status.video && (
             <>
               <VideoPreview video={status.video} />
               <Button variant="secondary" onClick={reset} className="w-full">

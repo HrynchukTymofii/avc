@@ -27,9 +27,11 @@ TERMINAL_STATES = frozenset({JobState.FINISHED, JobState.FAILED})
 
 @dataclass
 class TalkingHeadParams:
-    avatar_path: Path
+    # avatar_path is None only for voice-only jobs (no video is rendered).
+    avatar_path: Path | None
     script: str
     voice_id: str
+    voice_only: bool = False
 
 
 @dataclass
