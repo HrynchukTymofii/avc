@@ -101,7 +101,13 @@ export default function BrollPage() {
               <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
                 Duration
               </label>
-              <Select value={duration} onValueChange={setDuration} disabled={busy}>
+              <Select
+                value={duration}
+                onValueChange={(value) => {
+                  if (value !== null) setDuration(value)
+                }}
+                disabled={busy}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>

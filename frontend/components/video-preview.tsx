@@ -22,16 +22,10 @@ export function VideoPreview({ video, audio }: VideoPreviewProps) {
         </div>
       )}
       <div className="flex gap-2">
-        <Button asChild>
-          <a href={video} download>
-            Download video
-          </a>
-        </Button>
+        <Button render={<a href={video} download />}>Download video</Button>
         {audio && (
-          <Button asChild variant="secondary">
-            <a href={audio} download>
-              Download audio
-            </a>
+          <Button variant="secondary" render={<a href={audio} download />}>
+            Download audio
           </Button>
         )}
       </div>

@@ -94,7 +94,13 @@ export default function TalkingHeadPage() {
             <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
               Voice
             </label>
-            <Select value={voice} onValueChange={setVoice} disabled={busy || !voices?.length}>
+            <Select
+              value={voice}
+              onValueChange={(value) => {
+                if (value !== null) setVoice(value)
+              }}
+              disabled={busy || !voices?.length}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue
                   placeholder={voices === null ? "Loading voices…" : "No voices available"}
