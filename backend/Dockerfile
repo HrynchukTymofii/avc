@@ -72,7 +72,12 @@ RUN git clone --depth 1 --branch ${FISH_SPEECH_REF} \
     && sed -i -e 's/torch==2\.8\.[0-9]*/torch==2.4.1/g' \
               -e 's/torchaudio==2\.8\.[0-9]*/torchaudio==2.4.1/g' \
         /opt/fish-speech/pyproject.toml \
-    && python3.11 -m pip install /opt/fish-speech
+    && python3.11 -m pip install /opt/fish-speech \
+    # fish-speech modules call pyrootutils.setup_root(indicator='.project-root')
+    # at import time, walking up from the installed package and expecting its
+    # repo checkout; give site-packages the marker so imports work installed.
+    && python3.11 -c "import fish_speech, pathlib; \
+(pathlib.Path(fish_speech.__file__).parent.parent / '.project-root').touch()"
 
 # Pre-cache the S3FD face-detector weights MuseTalk's bundled face_detection
 # fetches on first use — adrianbulat.com is slow/flaky, so don't let the first
