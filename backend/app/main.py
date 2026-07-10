@@ -1,0 +1,117 @@
+"""FastAPI application factory and lifespan wiring."""
+
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+from app.config import Settings, get_settings
+from app.logging_config import setup_logging
+from app.pipelines.manager import ModelManager
+from app.pipelines.musetalk_pipeline import MuseTalkPipeline
+from app.pipelines.s2_pipeline import S2Pipeline
+from app.pipelines.wan_pipeline import WanPipeline
+from app.queue.job_store import JobStore
+from app.queue.worker import GPUWorker, JobProcessor
+from app.routes import generation as generation_routes
+from app.routes import status as status_routes
+from app.routes import voices as voices_routes
+from app.schemas import JobKind
+from app.services.broll import BrollProcessor
+from app.services.talking_head import TalkingHeadProcessor
+from app.services.validation import InputValidationError
+from app.services.voices import VoiceRegistry
+
+log = logging.getLogger(__name__)
+
+
+def build_model_manager(settings: Settings) -> ModelManager:
+    pipelines = [
+        S2Pipeline(settings.models_dir / "s2-pro", offload_policy=settings.s2_offload),
+        MuseTalkPipeline(
+            settings.models_dir / "musetalk", offload_policy=settings.musetalk_offload
+        ),
+        WanPipeline(
+            settings.models_dir / f"wan2.2-{settings.wan_variant}",
+            offload_policy=settings.wan_offload,
+        ),
+    ]
+    return ModelManager(pipelines, vram_reserve_gb=settings.vram_reserve_gb)
+
+
+def build_processors(
+    settings: Settings, manager: ModelManager, voices: VoiceRegistry
+) -> dict[JobKind, JobProcessor]:
+    return {
+        JobKind.TALKING_HEAD: TalkingHeadProcessor(manager, voices, settings),
+        JobKind.BROLL: BrollProcessor(manager, settings),
+    }
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings: Settings = app.state.settings
+    log.info(
+        "AI Video Studio backend starting",
+        extra={
+            "outputs_dir": str(settings.outputs_dir),
+            "models_dir": str(settings.models_dir),
+            "log_format": settings.log_format,
+        },
+    )
+
+    store = JobStore(settings.outputs_dir)
+    store.rehydrate()
+
+    voices = VoiceRegistry(settings.assets_dir)
+    voices.load()
+
+    manager = build_model_manager(settings)
+    worker = GPUWorker(
+        store,
+        build_processors(settings, manager, voices),
+        job_timeout_s=settings.job_timeout_s,
+        failure_hook=manager.after_job_failure,
+    )
+    worker.start()
+
+    app.state.store = store
+    app.state.worker = worker
+    app.state.voices = voices
+    app.state.model_manager = manager
+
+    yield
+
+    await worker.stop()
+    await manager.shutdown()
+    log.info("AI Video Studio backend shut down")
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or get_settings()
+    setup_logging(settings.log_format)
+    settings.ensure_dirs()
+
+    app = FastAPI(title="AI Video Studio", lifespan=lifespan)
+    app.state.settings = settings
+
+    app.mount("/outputs", StaticFiles(directory=settings.outputs_dir), name="outputs")
+    app.include_router(status_routes.router)
+    app.include_router(voices_routes.router)
+    app.include_router(generation_routes.router)
+
+    @app.exception_handler(InputValidationError)
+    async def _invalid_input(request: Request, exc: InputValidationError) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    return app
+
+
+app = create_app()

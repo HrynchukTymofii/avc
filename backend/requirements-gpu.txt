@@ -1,0 +1,21 @@
+# Model/GPU dependencies, installed in the Docker image (CUDA host) on top of
+# requirements.txt. torch is installed separately in the Dockerfile from the
+# CUDA wheel index; fish-speech and MuseTalk are installed from pinned git
+# checkouts there as well (MuseTalk is not packaged for pip).
+-r requirements.txt
+
+diffusers>=0.35
+transformers>=4.46
+accelerate>=1.0
+safetensors>=0.4
+
+# Audio
+soundfile>=0.12
+librosa>=0.10
+
+# Vision / video
+opencv-python-headless>=4.10
+imageio[ffmpeg]>=2.35
+numpy>=1.26
+einops>=0.8
+ftfy>=6.2

@@ -1,0 +1,16 @@
+[
+  {
+    "id": "en-male-david",
+    "name": "David (English, male)",
+    "language": "en",
+    "ref_audio": "voices/en-male-david.wav",
+    "ref_text": "The quick brown fox jumps over the lazy dog, but nobody stops to ask why the dog was so tired in the first place. Every morning, the harbour fills with small boats, their sails catching the early light as fishermen call out to one another across the water. Numbers like three hundred forty seven and twelve point five help capture the full range of natural speech."
+  },
+  {
+    "id": "en-female-zira",
+    "name": "Zira (English, female)",
+    "language": "en",
+    "ref_audio": "voices/en-female-zira.wav",
+    "ref_text": "The quick brown fox jumps over the lazy dog, but nobody stops to ask why the dog was so tired in the first place. Every morning, the harbour fills with small boats, their sails catching the early light as fishermen call out to one another across the water. Numbers like three hundred forty seven and twelve point five help capture the full range of natural speech."
+  }
+]

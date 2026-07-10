@@ -1,0 +1,228 @@
+"""Fish Audio S2 Pro as a managed pipeline (in-process fish-speech inference).
+
+The fish-speech package (pinned in the Docker image) provides two models:
+the dual-AR text-to-semantic transformer and the codec decoder. Both are owned
+directly by this wrapper so the ModelManager can move them between devices.
+All fish-speech/torch imports are lazy so the backend boots without them.
+
+Long scripts are split at sentence boundaries and synthesized chunk by chunk,
+which keeps memory bounded and makes progress reporting meaningful; chunks are
+joined with short silences and written as one 44.1 kHz mono WAV.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+from app.config import OffloadPolicy
+from app.pipelines.base import ManagedPipeline
+
+log = logging.getLogger(__name__)
+
+# Sentence-boundary split that also swallows the trailing delimiter; CJK-safe.
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?。！？])\s+")
+_MAX_CHUNK_CHARS = 400
+_INTER_CHUNK_SILENCE_S = 0.25
+_OUTPUT_SAMPLE_RATE = 44_100
+
+
+def split_script(text: str, max_chars: int = _MAX_CHUNK_CHARS) -> list[str]:
+    """Split a script into synthesis chunks at sentence boundaries, merging
+    short sentences up to max_chars. Oversized single sentences are hard-split."""
+    sentences = [s.strip() for s in _SENTENCE_SPLIT.split(text) if s.strip()]
+    chunks: list[str] = []
+    current = ""
+    for sentence in sentences:
+        while len(sentence) > max_chars:
+            if current:
+                chunks.append(current)
+                current = ""
+            chunks.append(sentence[:max_chars])
+            sentence = sentence[max_chars:].strip()
+        if not sentence:
+            continue
+        if current and len(current) + len(sentence) + 1 > max_chars:
+            chunks.append(current)
+            current = sentence
+        else:
+            current = f"{current} {sentence}".strip()
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+class S2Pipeline(ManagedPipeline):
+    def __init__(
+        self,
+        checkpoint_dir: Path,
+        *,
+        offload_policy: OffloadPolicy,
+        vram_estimate_gb: float = 10.0,
+        vram_peak_gb: float = 13.0,
+    ) -> None:
+        super().__init__(
+            "s2",
+            vram_estimate_gb=vram_estimate_gb,
+            vram_peak_gb=vram_peak_gb,
+            offload_policy=offload_policy,
+        )
+        self._checkpoint_dir = checkpoint_dir
+        self._text2semantic: Any = None
+        self._decode_one_token: Any = None
+        self._decoder: Any = None
+        self._device = "cpu"
+        # Reference audio encodings are tiny; cache per clip path so repeat jobs
+        # with the same voice skip re-encoding.
+        self._reference_cache: dict[str, Any] = {}
+
+    # ---- ManagedPipeline ----------------------------------------------------
+
+    def load(self) -> None:
+        if self._text2semantic is not None:
+            return
+        import torch
+        from fish_speech.models.dac.inference import load_model as load_decoder
+        from fish_speech.models.text2semantic.inference import init_model
+
+        if not self._checkpoint_dir.is_dir():
+            raise RuntimeError(
+                f"S2 Pro checkpoint not found at {self._checkpoint_dir} — "
+                "run scripts/download_models.sh first"
+            )
+        precision = torch.bfloat16
+        log.info("loading S2 Pro", extra={"checkpoint": str(self._checkpoint_dir)})
+        self._text2semantic, self._decode_one_token = init_model(
+            checkpoint_path=str(self._checkpoint_dir),
+            device="cpu",
+            precision=precision,
+            compile=False,
+        )
+        self._decoder = load_decoder(
+            config_name="modded_dac_vq",
+            checkpoint_path=str(self._checkpoint_dir / "codec.pth"),
+            device="cpu",
+        )
+        self._device = "cpu"
+
+    def to_gpu(self) -> None:
+        self._move("cuda")
+
+    def to_cpu(self) -> None:
+        self._move("cpu")
+        import torch
+
+        torch.cuda.empty_cache()
+
+    def unload(self) -> None:
+        self._text2semantic = None
+        self._decode_one_token = None
+        self._decoder = None
+        self._reference_cache.clear()
+        self._device = "cpu"
+
+    def _move(self, device: str) -> None:
+        if self._text2semantic is None:
+            raise RuntimeError("S2 pipeline is not loaded")
+        self._text2semantic.to(device)
+        self._decoder.to(device)
+        self._device = device
+
+    # ---- generation ------------------------------------------------------------
+
+    def generate(
+        self,
+        text: str,
+        reference_audio: Path,
+        out_path: Path,
+        on_progress: Callable[[float], None],
+        reference_text: str | None = None,
+    ) -> Path:
+        """Synthesize `text` in the voice cloned from `reference_audio` and write
+        a 44.1 kHz mono WAV to `out_path`. Blocking; run in a worker thread."""
+        import numpy as np
+        import soundfile as sf
+
+        if self._text2semantic is None or self._device != "cuda":
+            raise RuntimeError("S2 pipeline must be ON_GPU before generate()")
+
+        prompt_tokens, prompt_text = self._encode_reference(reference_audio, reference_text)
+        chunks = split_script(text)
+        if not chunks:
+            raise ValueError("script contains no speakable text")
+
+        silence = np.zeros(int(_INTER_CHUNK_SILENCE_S * _OUTPUT_SAMPLE_RATE), dtype=np.float32)
+        pieces: list[np.ndarray] = []
+        for index, chunk in enumerate(chunks):
+            pieces.append(self._synthesize_chunk(chunk, prompt_tokens, prompt_text))
+            if index < len(chunks) - 1:
+                pieces.append(silence)
+            on_progress((index + 1) / len(chunks))
+
+        waveform = np.concatenate(pieces)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        sf.write(str(out_path), waveform, _OUTPUT_SAMPLE_RATE, subtype="PCM_16")
+        log.info(
+            "speech synthesized",
+            extra={"chunks": len(chunks), "duration_s": round(len(waveform) / _OUTPUT_SAMPLE_RATE, 1)},
+        )
+        return out_path
+
+    def _encode_reference(
+        self, reference_audio: Path, reference_text: str | None
+    ) -> tuple[Any, str]:
+        """Encode the voice reference clip to codec tokens (cached per clip)."""
+        import torch
+        import torchaudio
+
+        cache_key = f"{reference_audio}:{reference_audio.stat().st_mtime_ns}"
+        if cache_key in self._reference_cache:
+            return self._reference_cache[cache_key], reference_text or ""
+
+        audio, sample_rate = torchaudio.load(str(reference_audio))
+        audio = audio.mean(dim=0, keepdim=True)  # downmix to mono
+        target_rate = self._decoder.sample_rate
+        if sample_rate != target_rate:
+            audio = torchaudio.functional.resample(audio, sample_rate, target_rate)
+        with torch.inference_mode():
+            tokens = self._decoder.encode(audio.to(self._device)[None])[0]
+        self._reference_cache[cache_key] = tokens
+        return tokens, reference_text or ""
+
+    def _synthesize_chunk(self, chunk: str, prompt_tokens: Any, prompt_text: str) -> Any:
+        """One sentence-group → semantic tokens → waveform (float32 at 44.1 kHz)."""
+        import torch
+        import torchaudio
+        from fish_speech.models.text2semantic.inference import generate_long
+
+        segments: list[Any] = []
+        with torch.inference_mode():
+            for response in generate_long(
+                model=self._text2semantic,
+                device=self._device,
+                decode_one_token=self._decode_one_token,
+                text=chunk,
+                prompt_tokens=[prompt_tokens] if prompt_tokens is not None else None,
+                prompt_text=[prompt_text] if prompt_text else None,
+                max_new_tokens=0,
+                top_p=0.8,
+                temperature=0.8,
+                repetition_penalty=1.1,
+                iterative_prompt=True,
+            ):
+                if response.action == "sample":
+                    segments.append(response.codes)
+            if not segments:
+                raise RuntimeError("S2 produced no audio tokens for a text chunk")
+            codes = torch.cat(segments, dim=1)
+            waveform = self._decoder.decode(codes[None].to(self._device))[0]
+
+        waveform = waveform.float().cpu()
+        if self._decoder.sample_rate != _OUTPUT_SAMPLE_RATE:
+            waveform = torchaudio.functional.resample(
+                waveform, self._decoder.sample_rate, _OUTPUT_SAMPLE_RATE
+            )
+        return waveform.squeeze(0).numpy()

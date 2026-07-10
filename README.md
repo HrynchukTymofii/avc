@@ -1,0 +1,275 @@
+# AI Video Studio
+
+A self-hosted web app with two GPU generation tools sharing one backend, one
+queue, and one GPU:
+
+- **Talking Head Studio** — upload a portrait, pick a voice, paste a script →
+  lip-synced talking-head video (Fish Audio **S2 Pro** voice cloning +
+  **MuseTalk** lip-sync).
+- **B-Roll Generator** — describe a shot (optionally from a reference image) →
+  3–5 second clip (**Wan2.2 TI2V-5B**), encoded for Premiere Pro.
+
+Architecture details live in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Honest speed expectations
+
+On the target g6e.xlarge (NVIDIA L40S, 48 GB VRAM):
+
+| Job | Time |
+|---|---|
+| Talking head | ≈ 1–3 minutes of processing **per minute of script** |
+| B-roll clip (5 s, 704×1280) | ≈ 3–8 minutes per clip |
+| First job after a restart | + 1–2 minutes (models load lazily on first use) |
+
+Queue a batch and collect results from the "Recent generations" grid — jobs
+keep running when you close the browser.
+
+## Requirements
+
+| Component | VRAM (bf16) | Disk |
+|---|---|---|
+| Fish Audio S2 Pro | ~10 GB | ~10 GB |
+| MuseTalk 1.5 (+ whisper-tiny, sd-vae, dwpose) | ~6 GB | ~5 GB |
+| Wan2.2 TI2V-5B (diffusers) | ~18 GB (peak ~26 GB) | ~35 GB |
+
+All three fit resident on a 48 GB card; the model manager offloads
+least-recently-used pipelines automatically if VRAM runs short (policies per
+pipeline via `S2_OFFLOAD` / `MUSETALK_OFFLOAD` / `WAN_OFFLOAD` = `cpu` | `unload`).
+
+> **License note:** S2 Pro weights are under the Fish Audio Research License —
+> free for research/non-commercial (hobby) use. Commercial use needs a license
+> from Fish Audio.
+
+---
+
+## 1. Local development (no GPU needed for the app itself)
+
+```bash
+# backend
+cd backend
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt
+python -m pytest                                     # 76 tests
+python -m uvicorn app.main:app --port 8000
+
+# frontend (second terminal)
+cd frontend
+npm install
+npm run dev                                          # http://localhost:3000
+```
+
+The UI, API, queue, and validation all work without a GPU; generation jobs fail
+with a clear error until the model dependencies and weights exist (that's
+expected — GPU work happens on the server).
+
+### Voices
+
+Voices are 10–30 s reference WAV clips in `backend/assets/voices/` listed in
+`backend/assets/voices.json` — see `backend/assets/voices/README.md`. Two
+synthetic English defaults ship with the repo; replace them with real
+recordings for production-quality cloning, and record in the output language
+you want (the clone inherits accent and style).
+
+---
+
+## 2. AWS deployment (g6e.xlarge)
+
+### 2.0 Before you start
+
+- **Request a GPU quota.** New AWS accounts have 0 vCPUs for G-type instances:
+  AWS Console → Service Quotas → EC2 → "Running On-Demand G and VT instances" →
+  request **4 vCPUs**. Approval takes hours to ~a day, so do this first.
+- **Cost:** g6e.xlarge is ≈ $1.9/hour on demand. **Stop the instance whenever
+  you're not generating** — that's the difference between ~$10 and ~$1,400 a
+  month. Files, models, and the Elastic IP survive stop/start. (g6e.2xlarge is
+  the upgrade if CPU/RAM ever bottlenecks; multi-GPU instances are pointless
+  for this app — the queue uses one GPU.)
+
+### 2.1 Launch the instance
+
+1. EC2 → Launch instance.
+2. **AMI — two paths:**
+   - *Recommended:* **AWS Deep Learning Base AMI (Ubuntu 22.04)** — NVIDIA
+     driver, Docker, and the NVIDIA Container Toolkit are pre-installed; skip
+     step 2.2.
+   - *Plain:* **Ubuntu Server 22.04 LTS** — install the driver and toolkit
+     yourself in step 2.2.
+3. Instance type: **g6e.xlarge**.
+4. Storage: **300 GB gp3** root volume (weights ~55 GB + Docker images + outputs).
+5. Security group: inbound **22** (your IP only), **80**, **443**. Nothing else.
+6. After launch: **Elastic IPs → Allocate → Associate** with the instance, so
+   the public IP survives stop/start and your DNS record stays valid.
+
+### 2.2 Driver + Docker (plain Ubuntu path only)
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y ubuntu-drivers-common
+sudo ubuntu-drivers install --gpgpu
+sudo reboot
+# after reboot:
+nvidia-smi                                # must show the L40S
+
+# Docker
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker ubuntu && newgrp docker
+
+# NVIDIA Container Toolkit
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+  sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt update && sudo apt install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi   # sanity check
+```
+
+### 2.3 Get the code and models
+
+```bash
+git clone <your-repo-url> ai-video-studio && cd ai-video-studio
+cp .env.example .env                       # defaults are fine to start
+
+# Hugging Face: S2 Pro is license-gated.
+python3 -m pip install 'huggingface_hub[cli]'
+# 1) create a free account at huggingface.co
+# 2) accept the license at https://huggingface.co/fishaudio/s2-pro
+# 3) authenticate:
+hf auth login
+
+bash backend/scripts/download_models.sh    # ~55 GB, resumable, 30–60 min
+```
+
+### 2.4 Start it
+
+```bash
+docker compose up -d --build               # first build takes a while (CUDA image + deps)
+docker compose logs -f backend             # watch for "gpu worker started"
+curl http://localhost:8000/health          # {"status":"ok"}
+```
+
+**Validate the pipelines now:** submit one talking-head job and one B-roll job
+(via the UI over an SSH tunnel, section 2.7) and watch the logs. The
+fish-speech and MuseTalk projects move fast; if an upstream API changed and a
+job fails, pin `FISH_SPEECH_REF` / `MUSETALK_REF` in `backend/Dockerfile` to
+the last-known-good commits and adjust the two wrapper files
+(`backend/app/pipelines/s2_pipeline.py`, `musetalk_pipeline.py`) — all
+integration code is contained there by design.
+
+### 2.5 Domain + HTTPS + password
+
+1. **DNS:** at your DNS provider (e.g. Vercel DNS), add a plain **A record**:
+   `studio` → your Elastic IP. (If your domain lives on Vercel: add it as a DNS
+   record, *not* as a domain attached to a Vercel project.)
+2. **Nginx:**
+
+```bash
+sudo apt install -y nginx apache2-utils
+sudo cp deploy/nginx.conf.example /etc/nginx/sites-available/ai-video-studio
+sudo sed -i 's/studio.example.com/studio.YOURDOMAIN.com/' /etc/nginx/sites-available/ai-video-studio
+sudo ln -s /etc/nginx/sites-available/ai-video-studio /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo htpasswd -c /etc/nginx/.htpasswd yourname     # the shared password
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+3. **HTTPS (Let's Encrypt, auto-renewing):**
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d studio.YOURDOMAIN.com
+```
+
+Open `https://studio.YOURDOMAIN.com`, enter the password — done.
+
+### 2.6 Start on reboot
+
+The compose services carry `restart: unless-stopped`, so Docker brings them
+back automatically. For explicit control:
+
+```bash
+sudo cp deploy/ai-video-studio.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now ai-video-studio
+```
+
+### 2.7 Stop/start workflow (do this — it's the whole cost model)
+
+```bash
+aws ec2 stop-instances --instance-ids i-...    # or the console Stop button
+aws ec2 start-instances --instance-ids i-...
+```
+
+- Stopped instances cost only EBS storage (~$25/month for 300 GB) + the
+  Elastic IP (~$3.6/month).
+- Everything persists: models, outputs, Docker images, certificates.
+- With the Elastic IP attached, the address — and therefore your DNS record —
+  never changes.
+
+**SSH tunnel alternative** (no domain/nginx needed, e.g. before DNS is set up):
+
+```bash
+ssh -L 3000:localhost:3000 ubuntu@<elastic-ip>
+# then open http://localhost:3000
+```
+
+---
+
+## 3. API reference
+
+| Endpoint | Description |
+|---|---|
+| `POST /api/talking-head` | multipart: `avatar` (PNG/JPEG ≤ 20 MB), `script` (≤ 20k chars), `voice` → `{"jobId"}` |
+| `POST /api/broll` | multipart: `prompt` (≤ 1k chars), `duration` (3–5), optional `image` → `{"jobId"}` |
+| `GET /api/status/{jobId}` | `{"status":"queued","position":1}` / `{"status":"processing","progress":62,"stage":"lip-sync"}` / `{"status":"finished","video":...,"audio":...}` / `{"status":"failed","error":...}` |
+| `GET /api/jobs?kind=&limit=` | recent jobs for the UI grids |
+| `GET /api/voices` | configured voice presets |
+| `GET /outputs/{jobId}/...` | generated files (static) |
+
+Invalid input returns **422** with a human-readable `detail`.
+
+---
+
+## 4. Troubleshooting
+
+**`could not select device driver "nvidia"` on compose up** — the NVIDIA
+Container Toolkit isn't installed/configured (section 2.2), or Docker wasn't
+restarted after `nvidia-ctk runtime configure`.
+
+**`CUDA out of memory`** — the manager already offloads idle pipelines and
+after any OOM it evicts everything and continues with the next job. If a
+specific pipeline keeps OOMing, set its policy to `unload` in `.env` (frees
+instead of parking in RAM) and restart. Remember system RAM is 32 GB — don't
+set all three to `cpu` on smaller instances.
+
+**Model download fails** — usually the S2 Pro license gate: accept it on the
+model page *and* authenticate (`hf auth login` or `HF_TOKEN=...`). Also check
+disk: the script needs 70 GB free and prints what it downloaded. Re-running
+resumes.
+
+**Job fails instantly with an import/attribute error from fish_speech or
+musetalk** — upstream API drift (see 2.4). Pin the refs in
+`backend/Dockerfile`, rebuild (`docker compose build backend`), and if needed
+adapt the wrapper in `backend/app/pipelines/` — nothing outside those files
+touches the model APIs.
+
+**First job after startup is slow** — by design: weights load lazily on first
+use (~1–2 min) and stay in memory afterwards. Watch
+`docker compose logs -f backend` for `pipeline transition` events.
+
+**"no face detected in the avatar image"** — use a clear, front-facing,
+reasonably large portrait; extreme angles and tiny faces fail detection.
+
+**Uploads rejected at 413** — nginx `client_max_body_size` (100 MB in the
+example config) or `MAX_UPLOAD_MB` in `.env` (20 MB default).
+
+**Instance IP changed after stop/start** — the Elastic IP wasn't associated
+(section 2.1, step 6).
+
+**pip dependency conflicts during image build** — MuseTalk pins older
+diffusers/transformers; this image intentionally installs
+`requirements-gpu.txt` last so the newer versions win. If MuseTalk breaks
+against a newer diffusers at runtime, pin `MUSETALK_REF` to a commit tested
+with the versions in `requirements-gpu.txt`.

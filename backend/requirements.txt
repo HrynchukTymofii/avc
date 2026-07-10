@@ -1,0 +1,16 @@
+# Web framework
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.9
+pydantic-settings>=2.5
+python-multipart>=0.0.12
+
+# Media / input validation
+pillow>=10.4
+
+# HTTP client (test client dependency now; used by later stages)
+httpx>=0.27
+
+# Model/GPU dependencies live in requirements-gpu.txt (installed in the Docker
+# image); this file alone is enough to run the API and the test suite on
+# machines without CUDA.
