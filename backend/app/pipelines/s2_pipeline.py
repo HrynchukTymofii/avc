@@ -106,6 +106,16 @@ class S2Pipeline(ManagedPipeline):
             checkpoint_path=str(self._checkpoint_dir / "codec.pth"),
             device="cpu",
         )
+        # fish-speech loads safetensors memory-mapped, so weights stay on disk
+        # until first touched — which would turn the CPU->GPU move into an
+        # IOPS-bound page-fault crawl on EBS. Clone every tensor now to pull
+        # the weights into RAM sequentially while we're still in the (already
+        # slow-budgeted) load phase.
+        import itertools
+
+        for module in (self._text2semantic, self._decoder):
+            for tensor in itertools.chain(module.parameters(), module.buffers()):
+                tensor.data = tensor.data.clone()
         self._device = "cpu"
 
     def to_gpu(self) -> None:
