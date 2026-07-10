@@ -94,6 +94,28 @@ class S2Pipeline(ManagedPipeline):
                 "run scripts/download_models.sh first"
             )
         precision = torch.bfloat16
+        # Warm the page cache with plain sequential reads first: the weight
+        # files get memory-mapped with random-access madvise, so letting the
+        # loader (or the clone below) fault pages in from disk runs at EBS
+        # random-IOPS speed (~12 MB/s observed). Sequential reads run at full
+        # volume throughput and everything afterwards hits RAM.
+        import time
+
+        warm_start = time.perf_counter()
+        warmed_bytes = 0
+        for path in sorted(self._checkpoint_dir.rglob("*")):
+            if path.is_file() and path.suffix in {".safetensors", ".pth"}:
+                with open(path, "rb") as fh:
+                    while fh.read(32 << 20):
+                        pass
+                warmed_bytes += path.stat().st_size
+        log.info(
+            "model files warmed into cache",
+            extra={
+                "gb": round(warmed_bytes / 1e9, 1),
+                "took_s": round(time.perf_counter() - warm_start, 1),
+            },
+        )
         log.info("loading S2 Pro", extra={"checkpoint": str(self._checkpoint_dir)})
         self._text2semantic, self._decode_one_token = init_model(
             checkpoint_path=str(self._checkpoint_dir),
