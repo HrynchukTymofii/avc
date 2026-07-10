@@ -143,6 +143,16 @@ hf auth login
 bash backend/scripts/download_models.sh    # ~55 GB, resumable, 30–60 min
 ```
 
+> **Already downloaded models before this script gained dwpose /
+> face-parse-bisent / the top-level sd-vae path?** Move the VAE and re-run the
+> script — it skips what's already there and only fetches the two small new
+> repos:
+>
+> ```bash
+> mv backend/models/musetalk/sd-vae backend/models/sd-vae 2>/dev/null || true
+> bash backend/scripts/download_models.sh
+> ```
+
 ### 2.4 Start it
 
 ```bash
@@ -158,6 +168,14 @@ job fails, pin `FISH_SPEECH_REF` / `MUSETALK_REF` in `backend/Dockerfile` to
 the last-known-good commits and adjust the two wrapper files
 (`backend/app/pipelines/s2_pipeline.py`, `musetalk_pipeline.py`) — all
 integration code is contained there by design.
+
+> **Do not bump torch, mmcv, mmpose, or fish-speech independently** — the
+> Dockerfile header documents the version matrix. In short: torch 2.4.1 is the
+> newest release with prebuilt mmcv wheels (the runtime image has no CUDA
+> compiler, so mmcv must never build from source), and fish-speech's
+> `torch==2.8.0` pin is relaxed at build time because its inference code
+> doesn't actually need 2.8. A build-time import smoke test in the Dockerfile
+> catches most incompatibilities before they reach a running job.
 
 ### 2.5 Domain + HTTPS + password
 

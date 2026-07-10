@@ -48,6 +48,7 @@ class MuseTalkPipeline(ManagedPipeline):
         self._pe: Any = None
         self._whisper: Any = None
         self._audio_processor: Any = None
+        self._face_parser: Any = None
         self._device = "cpu"
 
     # ---- ManagedPipeline ----------------------------------------------------
@@ -64,6 +65,17 @@ class MuseTalkPipeline(ManagedPipeline):
             raise RuntimeError(
                 f"MuseTalk checkpoints not found at {root} — run scripts/download_models.sh first"
             )
+        # MuseTalk loads these relative to the working directory (the mounted
+        # models volume); fail here with a clear message instead of deep inside
+        # the upstream code.
+        models_root = root.parent
+        for required in ("sd-vae", "dwpose/dw-ll_ucoco_384.pth", "face-parse-bisent/79999_iter.pth"):
+            if not (models_root / required).exists():
+                raise RuntimeError(
+                    f"missing MuseTalk companion weights at {models_root / required} — "
+                    "re-run scripts/download_models.sh (it now fetches sd-vae, dwpose "
+                    "and face-parse-bisent)"
+                )
         log.info("loading MuseTalk", extra={"checkpoint": str(root)})
         self._vae, self._unet, self._pe = load_all_model(
             unet_model_path=str(root / "musetalkV15" / "unet.pth"),
@@ -82,6 +94,9 @@ class MuseTalkPipeline(ManagedPipeline):
 
     def to_cpu(self) -> None:
         self._move("cpu")
+        # FaceParsing manages its own device (CUDA when available) and is cheap
+        # to rebuild, so drop it rather than parking it in RAM.
+        self._face_parser = None
         import torch
 
         torch.cuda.empty_cache()
@@ -92,6 +107,7 @@ class MuseTalkPipeline(ManagedPipeline):
         self._pe = None
         self._whisper = None
         self._audio_processor = None
+        self._face_parser = None
         self._device = "cpu"
 
     def _move(self, device: str) -> None:
@@ -118,11 +134,14 @@ class MuseTalkPipeline(ManagedPipeline):
         import numpy as np
         import torch
         from musetalk.utils.blending import get_image
+        from musetalk.utils.face_parsing import FaceParsing
         from musetalk.utils.preprocessing import get_landmark_and_bbox
         from musetalk.utils.utils import datagen
 
         if self._unet is None or self._device != "cuda":
             raise RuntimeError("MuseTalk pipeline must be ON_GPU before generate()")
+        if self._face_parser is None:
+            self._face_parser = FaceParsing()
 
         frame = cv2.imread(str(avatar_path))
         if frame is None:
@@ -136,6 +155,9 @@ class MuseTalkPipeline(ManagedPipeline):
                 "no face detected in the avatar image — use a clear, front-facing portrait"
             )
         x1, y1, x2, y2 = bbox
+        # v1.5 extends the crop below the chin so the jaw stays inside the
+        # animated region (upstream inference.py: extra_margin=10).
+        y2 = min(y2 + 10, frame.shape[0])
         crop = frame_list[0][y1:y2, x1:x2]
         crop = cv2.resize(crop, (256, 256), interpolation=cv2.INTER_LANCZOS4)
         input_latent = self._vae.get_latents_for_unet(crop)
@@ -181,7 +203,10 @@ class MuseTalkPipeline(ManagedPipeline):
                         res_frame = cv2.resize(
                             np.asarray(res_frame, dtype=np.uint8), (x2 - x1, y2 - y1)
                         )
-                        composed = get_image(frame, res_frame, [x1, y1, x2, y2])
+                        composed = get_image(
+                            frame, res_frame, [x1, y1, x2, y2],
+                            mode="jaw", fp=self._face_parser,
+                        )
                         writer.write(composed)
                     done += len(recon_frames)
                     on_progress(min(1.0, done / total_frames))

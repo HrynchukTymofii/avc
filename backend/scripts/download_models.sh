@@ -41,10 +41,14 @@ download fishaudio/s2-pro "$MODELS_DIR/s2-pro" || {
     exit 1
 }
 
-# --- MuseTalk 1.5 + its companion models (~5 GB) -----------------------------------
+# --- MuseTalk 1.5 + its companion models (~6 GB) -----------------------------------
 download TMElyralab/MuseTalk "$MODELS_DIR/musetalk"
 download openai/whisper-tiny "$MODELS_DIR/musetalk/whisper"
-download stabilityai/sd-vae-ft-mse "$MODELS_DIR/musetalk/sd-vae"
+# MuseTalk resolves the next three relative to the backend working directory
+# (/app/models/... in the container) — the layout below must match exactly.
+download stabilityai/sd-vae-ft-mse "$MODELS_DIR/sd-vae"
+download yzd-v/DWPose "$MODELS_DIR/dwpose" --include "dw-ll_ucoco_384.pth"
+download ManyOtherFunctions/face-parse-bisent "$MODELS_DIR/face-parse-bisent"
 
 # --- Wan2.2 TI2V-5B, diffusers layout (~35 GB) --------------------------------------
 download Wan-AI/Wan2.2-TI2V-5B-Diffusers "$MODELS_DIR/wan2.2-ti2v-5b"
