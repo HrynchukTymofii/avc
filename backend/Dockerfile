@@ -53,6 +53,10 @@ RUN git clone --depth 1 --branch ${MUSETALK_REF} \
         https://github.com/TMElyralab/MuseTalk.git /opt/MuseTalk \
     && python3.11 -m pip install -r /opt/MuseTalk/requirements.txt \
     && python3.11 -m pip install -U openmim \
+    # chumpy (mmpose dep, never imported at runtime here) has a 2018-era
+    # setup.py that imports pip and breaks under build isolation — install it
+    # against the real environment first so mmpose sees it satisfied.
+    && python3.11 -m pip install --no-build-isolation "chumpy==0.70" \
     && python3.11 -m mim install mmengine "mmcv==2.2.0" "mmpose==1.3.2"
 
 # fish-speech (S2 Pro inference): relax the torch pin to the version installed
