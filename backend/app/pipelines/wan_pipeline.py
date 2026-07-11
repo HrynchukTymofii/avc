@@ -119,7 +119,13 @@ class WanPipeline(ManagedPipeline):
     def _move(self, device: str) -> None:
         if self._t2v is None:
             raise RuntimeError("Wan pipeline is not loaded")
-        self._t2v.to(device)  # i2v shares the same modules; one move covers both
+        import torch
+
+        # Plain .to(device) upcasts these models to fp32 in this environment
+        # (verified with assets/diag_wan_vram.py: 23 GB bf16 became 43 GB fp32
+        # and OOM'd the L40S). An explicit dtype in the same call keeps bf16.
+        # i2v shares the same modules; one move covers both.
+        self._t2v.to(device, torch.bfloat16)
         self._device = device
 
     # ---- generation ------------------------------------------------------------
