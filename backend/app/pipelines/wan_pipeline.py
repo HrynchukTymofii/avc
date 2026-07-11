@@ -131,9 +131,8 @@ class WanPipeline(ManagedPipeline):
                 for name in ("transformer", "text_encoder", "vae")
             },
         )
-        # Tiled VAE decode: full 73-frame 704x1280 decode can spike VRAM at the
-        # very end of a run; tiling trades a little speed for safety.
-        self._t2v.vae.enable_tiling()
+        # No vae.enable_tiling(): diffusers 0.35's tiled decode is broken for
+        # the Wan2.2 VAE (temporal-chunk shape mismatch in avg_shortcut).
         # Second view over the same weights — supports image conditioning.
         self._i2v = WanImageToVideoPipeline.from_pipe(self._t2v)
         self._device = "cpu"
