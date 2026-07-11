@@ -115,3 +115,20 @@ class Voice(BaseModel):
 
 class VoicesResponse(BaseModel):
     voices: list[Voice]
+
+
+# ---- model catalog ---------------------------------------------------------------
+
+
+class EngineInfo(BaseModel):
+    id: str
+    label: str
+    tier: Literal["standard", "premium"]
+    credits: str
+    available: bool
+    default: bool
+
+
+class ModelsResponse(BaseModel):
+    # keyed by JobKind value: talking_head / broll / image
+    models: dict[str, list[EngineInfo]]

@@ -10,13 +10,16 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import Settings, get_settings
 from app.logging_config import setup_logging
+from app.pipelines.flux_pipeline import FluxPipeline
 from app.pipelines.manager import ModelManager
 from app.pipelines.musetalk_pipeline import MuseTalkPipeline
 from app.pipelines.s2_pipeline import S2Pipeline
+from app.pipelines.wan_a14b_pipeline import WanA14BPipeline
 from app.pipelines.wan_pipeline import WanPipeline
 from app.queue.job_store import JobStore
 from app.queue.worker import GPUWorker, JobProcessor
 from app.routes import generation as generation_routes
+from app.routes import models as models_routes
 from app.routes import status as status_routes
 from app.routes import voices as voices_routes
 from app.schemas import JobKind
@@ -39,7 +42,16 @@ def build_model_manager(settings: Settings) -> ModelManager:
             settings.models_dir / f"wan2.2-{settings.wan_variant}",
             offload_policy=settings.wan_offload,
         ),
+        FluxPipeline(
+            settings.models_dir / "flux.1-schnell",
+            offload_policy=settings.flux_offload,
+        ),
     ]
+    if settings.premium_enabled:
+        # H100-tier engines; never registered on the L40S (they don't fit).
+        pipelines.append(
+            WanA14BPipeline(settings.models_dir / "wan2.2-t2v-a14b", offload_policy="unload")
+        )
     return ModelManager(pipelines, vram_reserve_gb=settings.vram_reserve_gb)
 
 
@@ -104,6 +116,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(status_routes.router)
     app.include_router(voices_routes.router)
     app.include_router(generation_routes.router)
+    app.include_router(models_routes.router)
 
     @app.exception_handler(InputValidationError)
     async def _invalid_input(request: Request, exc: InputValidationError) -> JSONResponse:

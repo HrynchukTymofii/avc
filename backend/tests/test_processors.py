@@ -94,6 +94,24 @@ class FakeWan(ManagedPipeline):
         return out_path
 
 
+class FakeFlux(ManagedPipeline):
+    def __init__(self) -> None:
+        super().__init__("flux", vram_estimate_gb=34, vram_peak_gb=40, offload_policy="unload")
+        self.last_call: dict = {}
+
+    def load(self) -> None: ...
+    def to_gpu(self) -> None: ...
+    def to_cpu(self) -> None: ...
+    def unload(self) -> None: ...
+
+    def generate_image(self, prompt, orientation, out_path, on_progress, seed=None):
+        self.last_call = {"prompt": prompt, "orientation": orientation}
+        on_progress(1.0)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_bytes(b"FLUXPNG")
+        return out_path
+
+
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
     return Settings(
@@ -301,6 +319,22 @@ async def test_image_flow(settings: Settings) -> None:
     assert progress.stages() == ["diffusion"]
     values = [p for p, _ in progress.events]
     assert values == sorted(values)
+
+
+async def test_image_flow_dispatches_to_flux(settings: Settings) -> None:
+    wan, flux = FakeWan(), FakeFlux()
+    processor = ImageProcessor(build_manager(wan, flux), settings)
+    job = Job(
+        id="job7",
+        kind=JobKind.IMAGE,
+        params=ImageParams(prompt="a red fox", orientation="square", model="flux-schnell"),
+    )
+
+    outputs = await processor.process(job, ProgressLog())
+
+    assert outputs == {"image": "/outputs/job7/output.png"}
+    assert flux.last_call == {"prompt": "a red fox", "orientation": "square"}
+    assert wan.last_call == {}  # the wan pipeline was never touched
 
 
 def test_image_sizes_are_vae_compatible() -> None:

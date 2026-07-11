@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { FileDropzone } from "@/components/file-dropzone";
 import { JobProgress } from "@/components/job-progress";
+import { ModelSelect } from "@/components/model-select";
 import { RecentJobs } from "@/components/recent-jobs";
 import { VideoPreview } from "@/components/video-preview";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -23,7 +24,14 @@ import type { Voice } from "@/types/api";
 export default function TalkingHeadPage() {
   const [avatar, setAvatar] = useState<File | null>(null);
   const [voiceOnly, setVoiceOnly] = useState(false);
-  const [animate, setAnimate] = useState(false);
+  const [model, setModel] = useState("");
+
+  useEffect(() => {
+    // Nav "Voice Over" links land here with ?mode=voice.
+    if (new URLSearchParams(window.location.search).get("mode") === "voice") {
+      setVoiceOnly(true);
+    }
+  }, []);
   const [script, setScript] = useState("");
   const [voices, setVoices] = useState<Voice[] | null>(null);
   const [voice, setVoice] = useState<string>("");
@@ -59,7 +67,13 @@ export default function TalkingHeadPage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const response = await submitTalkingHead({ avatar, script, voice, voiceOnly, animate });
+      const response = await submitTalkingHead({
+        avatar,
+        script,
+        voice,
+        voiceOnly,
+        model: model || undefined,
+      });
       setJobId(response.jobId);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Submission failed");
@@ -109,16 +123,14 @@ export default function TalkingHeadPage() {
             Voice only — skip the video, just synthesize the narration
           </label>
 
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={animate}
-              onChange={(event) => setAnimate(event.target.checked)}
-              disabled={busy || voiceOnly}
-              className="size-4 accent-primary"
+          {!voiceOnly && (
+            <ModelSelect
+              kind="talking_head"
+              value={model}
+              onChange={setModel}
+              disabled={busy}
             />
-            Animated head — add subtle natural motion before lip-sync (+3–5 min)
-          </label>
+          )}
 
           <div className="space-y-1.5">
             <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">

@@ -9,6 +9,7 @@ import type {
   JobKind,
   JobListResponse,
   JobStatus,
+  ModelsResponse,
   VoicesResponse,
 } from "@/types/api";
 
@@ -36,19 +37,23 @@ async function handle<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export async function getModels(): Promise<ModelsResponse> {
+  return handle(await fetch("/api/models"));
+}
+
 export async function submitTalkingHead(input: {
   avatar: File | null;
   script: string;
   voice: string;
   voiceOnly?: boolean;
-  animate?: boolean;
+  model?: string;
 }): Promise<JobCreatedResponse> {
   const form = new FormData();
   if (input.avatar) form.append("avatar", input.avatar);
   form.append("script", input.script);
   form.append("voice", input.voice);
   if (input.voiceOnly) form.append("voice_only", "true");
-  if (input.animate) form.append("animate", "true");
+  if (input.model) form.append("model", input.model);
   return handle(await fetch("/api/talking-head", { method: "POST", body: form }));
 }
 
@@ -56,21 +61,25 @@ export async function submitBroll(input: {
   prompt: string;
   duration: number;
   image?: File | null;
+  model?: string;
 }): Promise<JobCreatedResponse> {
   const form = new FormData();
   form.append("prompt", input.prompt);
   form.append("duration", String(input.duration));
   if (input.image) form.append("image", input.image);
+  if (input.model) form.append("model", input.model);
   return handle(await fetch("/api/broll", { method: "POST", body: form }));
 }
 
 export async function submitImage(input: {
   prompt: string;
   orientation: string;
+  model?: string;
 }): Promise<JobCreatedResponse> {
   const form = new FormData();
   form.append("prompt", input.prompt);
   form.append("orientation", input.orientation);
+  if (input.model) form.append("model", input.model);
   return handle(await fetch("/api/image", { method: "POST", body: form }));
 }
 

@@ -10,9 +10,11 @@ import logging
 import random
 
 from app.config import Settings
+from app.models_catalog import get_engine
 from app.pipelines.manager import ModelManager
 from app.queue.job import ImageParams, Job
 from app.queue.worker import ProgressReporter
+from app.schemas import JobKind
 
 log = logging.getLogger(__name__)
 
@@ -31,10 +33,13 @@ class ImageProcessor:
         out_path = self._settings.outputs_dir / job.id / "output.png"
         seed = random.randrange(2**31)
 
+        engine = get_engine(JobKind.IMAGE, params.model)
+        pipeline_name = engine.pipeline if engine else "wan"
+
         report(0, "diffusion")
-        async with self._manager.acquire("wan") as wan:
+        async with self._manager.acquire(pipeline_name) as pipe:
             await asyncio.to_thread(
-                wan.generate_image,
+                pipe.generate_image,
                 prompt=params.prompt,
                 orientation=params.orientation,
                 out_path=out_path,

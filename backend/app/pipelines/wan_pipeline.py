@@ -90,9 +90,10 @@ class WanPipeline(ManagedPipeline):
         offload_policy: OffloadPolicy,
         vram_estimate_gb: float = 18.0,
         vram_peak_gb: float = 27.0,
+        name: str = "wan",
     ) -> None:
         super().__init__(
-            "wan",
+            name,
             vram_estimate_gb=vram_estimate_gb,
             vram_peak_gb=vram_peak_gb,
             offload_policy=offload_policy,

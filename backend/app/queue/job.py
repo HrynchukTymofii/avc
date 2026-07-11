@@ -33,8 +33,10 @@ class TalkingHeadParams:
     voice_id: str
     voice_only: bool = False
     # animate: synthesize a Wan idle-motion clip from the avatar first and
-    # lip-sync onto it, instead of onto the frozen still.
+    # lip-sync onto it, instead of onto the frozen still. Derived from `model`
+    # at the route (engine "musetalk-animate").
     animate: bool = False
+    model: str = "musetalk"  # engine id from models_catalog
 
 
 @dataclass
@@ -42,12 +44,14 @@ class BrollParams:
     prompt: str
     duration_s: int
     image_path: Path | None
+    model: str = "wan-5b"  # engine id from models_catalog
 
 
 @dataclass
 class ImageParams:
     prompt: str
     orientation: str  # key of wan_pipeline.IMAGE_SIZES
+    model: str = "wan-5b"  # engine id from models_catalog
 
 
 JobParams = TalkingHeadParams | BrollParams | ImageParams

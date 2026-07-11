@@ -43,6 +43,19 @@ export interface JobListResponse {
   jobs: JobSummary[];
 }
 
+export interface EngineInfo {
+  id: string;
+  label: string;
+  tier: "standard" | "premium";
+  credits: string;
+  available: boolean;
+  default: boolean;
+}
+
+export interface ModelsResponse {
+  models: Record<string, EngineInfo[]>;
+}
+
 export interface Voice {
   id: string;
   name: string;

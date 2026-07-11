@@ -10,9 +10,11 @@ import logging
 import random
 
 from app.config import Settings
+from app.models_catalog import get_engine
 from app.pipelines.manager import ModelManager
 from app.queue.job import BrollParams, Job
 from app.queue.worker import ProgressReporter
+from app.schemas import JobKind
 from app.services import ffmpeg
 
 log = logging.getLogger(__name__)
@@ -34,8 +36,11 @@ class BrollProcessor:
         final_path = job_dir / "output.mp4"
         seed = random.randrange(2**31)
 
+        engine = get_engine(JobKind.BROLL, params.model)
+        pipeline_name = engine.pipeline if engine else "wan"
+
         report(0, "diffusion")
-        async with self._manager.acquire("wan") as wan:
+        async with self._manager.acquire(pipeline_name) as wan:
             await asyncio.to_thread(
                 wan.generate,
                 prompt=params.prompt,

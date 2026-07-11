@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { FileDropzone } from "@/components/file-dropzone";
 import { JobProgress } from "@/components/job-progress";
+import { ModelSelect } from "@/components/model-select";
 import { RecentJobs } from "@/components/recent-jobs";
 import { VideoPreview } from "@/components/video-preview";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -25,6 +26,7 @@ export default function BrollPage() {
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState<string>("5");
   const [image, setImage] = useState<File | null>(null);
+  const [model, setModel] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -46,7 +48,12 @@ export default function BrollPage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const response = await submitBroll({ prompt, duration: Number(duration), image });
+      const response = await submitBroll({
+        prompt,
+        duration: Number(duration),
+        image,
+        model: model || undefined,
+      });
       setJobId(response.jobId);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Submission failed");
@@ -95,6 +102,8 @@ export default function BrollPage() {
               disabled={busy}
             />
           </div>
+
+          <ModelSelect kind="broll" value={model} onChange={setModel} disabled={busy} />
 
           <div className="grid gap-5 sm:grid-cols-[1fr_2fr]">
             <div className="space-y-1.5">

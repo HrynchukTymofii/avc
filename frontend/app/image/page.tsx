@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { JobProgress } from "@/components/job-progress";
+import { ModelSelect } from "@/components/model-select";
 import { RecentJobs } from "@/components/recent-jobs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ const ORIENTATIONS = [
 export default function ImagePage() {
   const [prompt, setPrompt] = useState("");
   const [orientation, setOrientation] = useState<string>("landscape");
+  const [model, setModel] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export default function ImagePage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const response = await submitImage({ prompt, orientation });
+      const response = await submitImage({ prompt, orientation, model: model || undefined });
       setJobId(response.jobId);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Submission failed");
@@ -96,7 +98,9 @@ export default function ImagePage() {
             />
           </div>
 
-          <div className="space-y-1.5 sm:max-w-xs">
+          <div className="grid gap-5 sm:grid-cols-2">
+          <ModelSelect kind="image" value={model} onChange={setModel} disabled={busy} />
+          <div className="space-y-1.5">
             <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
               Format
             </label>
@@ -118,6 +122,7 @@ export default function ImagePage() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
           </div>
 
           {submitError && (
