@@ -216,7 +216,39 @@ sudo cp deploy/ai-video-studio.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now ai-video-studio
 ```
 
-### 2.7 Stop/start workflow (do this — it's the whole cost model)
+### 2.7 Premium tier: H100 instance for the 14B models (optional)
+
+The heavy engines (Wan2.2 **A14B** high-quality B-roll; later S2V-14B /
+Animate-14B) need ~80 GB VRAM and run on a **separate single-H100 instance**
+(AWS P5 family — its quota is separate from G instances and starts at 0;
+request "Running On-Demand P instances" ≥ 16 vCPUs). The everyday L40S
+instance keeps running the standard tier untouched.
+
+P5 bills ≈ $4+/hour from launch — set up promptly, stop when done.
+
+1. Launch: P5 (single-H100 size), **Deep Learning Base AMI (Ubuntu 22.04)**,
+   **400 GB gp3** disk, security group as in 2.1.
+2. Set up:
+
+```bash
+git clone https://github.com/HrynchukTymofii/avc.git ai-video-studio && cd ai-video-studio
+cp .env.example .env
+sed -i 's/^PREMIUM_ENABLED=false/PREMIUM_ENABLED=true/' .env
+# HF_HUB_DISABLE_XET=1 works around a flaky hf download backend.
+# PREMIUM_ENABLED=true makes the script also fetch the ~110 GB A14B weights.
+PREMIUM_ENABLED=true HF_HUB_DISABLE_XET=1 bash backend/scripts/download_models.sh
+docker compose up -d --build
+```
+
+3. Use it via SSH tunnel (`ssh -L 3000:localhost:3000 ubuntu@<ip>`), open
+   http://localhost:3000 → B-Roll → model "Wan2.2 A14B — high quality".
+
+> The first A14B run is a **validation run**: the 5B model needed several
+> live-GPU fixes on first contact and A14B inherits them, but expect the
+> possibility of one or two new one-line issues. Capture logs with the
+> command from section 4.
+
+### 2.8 Stop/start workflow (do this — it's the whole cost model)
 
 ```bash
 aws ec2 stop-instances --instance-ids i-...    # or the console Stop button
