@@ -33,7 +33,11 @@ def _status_for(job: Job, store: JobStore) -> StatusResponse:
             audio=job.outputs.get("audio"),
         )
     if job.state is JobState.FINISHED:
-        return FinishedStatus(video=job.outputs.get("video"), audio=job.outputs.get("audio"))
+        return FinishedStatus(
+            video=job.outputs.get("video"),
+            audio=job.outputs.get("audio"),
+            image=job.outputs.get("image"),
+        )
     return FailedStatus(error=job.error or "Unknown error")
 
 
@@ -71,6 +75,7 @@ async def list_jobs(
                 created_at=job.created_at,
                 video=job.outputs.get("video"),
                 audio=job.outputs.get("audio"),
+                image=job.outputs.get("image"),
             )
             for job in jobs
         ]

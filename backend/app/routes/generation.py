@@ -1,4 +1,4 @@
-"""POST /api/talking-head and POST /api/broll: validate, save inputs, enqueue."""
+"""POST /api/talking-head, /api/broll and /api/image: validate, save inputs, enqueue."""
 
 import logging
 from typing import Annotated
@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.config import Settings
 from app.deps import get_settings_dep, get_worker
-from app.queue.job import BrollParams, Job, TalkingHeadParams, new_job_id
+from app.pipelines.wan_pipeline import IMAGE_SIZES
+from app.queue.job import BrollParams, ImageParams, Job, TalkingHeadParams, new_job_id
 from app.queue.worker import GPUWorker
 from app.routes.voices import get_voices
 from app.schemas import ErrorResponse, JobCreatedResponse, JobKind
@@ -96,3 +97,26 @@ async def create_broll(
     )
     await worker.submit(job)
     return JobCreatedResponse(job_id=job_id)
+
+
+@router.post("/image", response_model=JobCreatedResponse, responses=_RESPONSES)
+async def create_image(
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+    worker: Annotated[GPUWorker, Depends(get_worker)],
+    prompt: Annotated[str, Form()],
+    orientation: Annotated[str, Form()] = "landscape",
+) -> JobCreatedResponse:
+    prompt = validate_text(prompt, field="prompt", max_chars=settings.max_prompt_chars)
+    if orientation not in IMAGE_SIZES:
+        raise InputValidationError(
+            f"orientation must be one of {', '.join(sorted(IMAGE_SIZES))}"
+        )
+
+    job = Job(
+        id=new_job_id(),
+        kind=JobKind.IMAGE,
+        params=ImageParams(prompt=prompt, orientation=orientation),
+        label=_label(prompt),
+    )
+    await worker.submit(job)
+    return JobCreatedResponse(job_id=job.id)

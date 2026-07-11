@@ -21,6 +21,7 @@ from app.routes import status as status_routes
 from app.routes import voices as voices_routes
 from app.schemas import JobKind
 from app.services.broll import BrollProcessor
+from app.services.image import ImageProcessor
 from app.services.talking_head import TalkingHeadProcessor
 from app.services.validation import InputValidationError
 from app.services.voices import VoiceRegistry
@@ -48,6 +49,7 @@ def build_processors(
     return {
         JobKind.TALKING_HEAD: TalkingHeadProcessor(manager, voices, settings),
         JobKind.BROLL: BrollProcessor(manager, settings),
+        JobKind.IMAGE: ImageProcessor(manager, settings),
     }
 
 

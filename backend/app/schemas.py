@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class JobKind(str, Enum):
     TALKING_HEAD = "talking_head"
     BROLL = "broll"
+    IMAGE = "image"
 
 
 class JobCreatedResponse(BaseModel):
@@ -38,6 +39,11 @@ class BrollRequest(BaseModel):
     duration: int = Field(ge=3, le=5)
 
 
+class ImageRequest(BaseModel):
+    prompt: str = Field(min_length=1)
+    orientation: Literal["landscape", "portrait", "square"] = "landscape"
+
+
 # ---- status: discriminated union on `status` ------------------------------------
 
 
@@ -56,11 +62,13 @@ class ProcessingStatus(BaseModel):
 
 
 class FinishedStatus(BaseModel):
-    # `audio` is talking-head only; `video` is absent for voice-only jobs.
+    # `audio` is talking-head only; `video` is absent for voice-only jobs;
+    # `image` is image jobs only.
     # Routes serialize with exclude_none so absent keys are omitted, not null.
     status: Literal["finished"] = "finished"
     video: str | None = None
     audio: str | None = None
+    image: str | None = None
 
 
 class FailedStatus(BaseModel):
@@ -87,6 +95,7 @@ class JobSummary(BaseModel):
     created_at: datetime = Field(serialization_alias="createdAt")
     video: str | None = None
     audio: str | None = None
+    image: str | None = None
 
 
 class JobListResponse(BaseModel):

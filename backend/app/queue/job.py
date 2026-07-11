@@ -41,7 +41,13 @@ class BrollParams:
     image_path: Path | None
 
 
-JobParams = TalkingHeadParams | BrollParams
+@dataclass
+class ImageParams:
+    prompt: str
+    orientation: str  # key of wan_pipeline.IMAGE_SIZES
+
+
+JobParams = TalkingHeadParams | BrollParams | ImageParams
 
 
 def new_job_id() -> str:

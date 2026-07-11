@@ -62,6 +62,16 @@ export async function submitBroll(input: {
   return handle(await fetch("/api/broll", { method: "POST", body: form }));
 }
 
+export async function submitImage(input: {
+  prompt: string;
+  orientation: string;
+}): Promise<JobCreatedResponse> {
+  const form = new FormData();
+  form.append("prompt", input.prompt);
+  form.append("orientation", input.orientation);
+  return handle(await fetch("/api/image", { method: "POST", body: form }));
+}
+
 export async function getStatus(jobId: string): Promise<JobStatus> {
   return handle(await fetch(`/api/status/${encodeURIComponent(jobId)}`));
 }

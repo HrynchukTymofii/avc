@@ -1,6 +1,6 @@
 /** TypeScript mirrors of the backend's Pydantic schemas (backend/app/schemas.py). */
 
-export type JobKind = "talking_head" | "broll";
+export type JobKind = "talking_head" | "broll" | "image";
 
 export interface JobCreatedResponse {
   jobId: string;
@@ -12,7 +12,7 @@ export const STAGE_LABELS: Record<Stage, string> = {
   starting: "Starting",
   tts: "Generating speech",
   "lip-sync": "Animating avatar",
-  diffusion: "Generating video",
+  diffusion: "Generating", // shared by video and image jobs
   encoding: "Encoding video",
 };
 
@@ -24,7 +24,7 @@ export function stageLabel(stage: string): string {
 export type JobStatus =
   | { status: "queued"; position: number }
   | { status: "processing"; progress: number; stage: string; audio?: string }
-  | { status: "finished"; video?: string; audio?: string }
+  | { status: "finished"; video?: string; audio?: string; image?: string }
   | { status: "failed"; error: string };
 
 export interface JobSummary {
@@ -35,6 +35,7 @@ export interface JobSummary {
   createdAt: string; // ISO 8601
   video?: string;
   audio?: string;
+  image?: string;
 }
 
 export interface JobListResponse {

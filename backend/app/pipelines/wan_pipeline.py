@@ -24,6 +24,13 @@ _HEIGHT = 704
 _WIDTH = 1280
 _INFERENCE_STEPS = 40
 _GUIDANCE_SCALE = 5.0
+# Single-frame generation reuses the video model as a text-to-image model.
+# All dimensions must be multiples of 16 (VAE spatial compression).
+IMAGE_SIZES: dict[str, tuple[int, int]] = {  # orientation -> (height, width)
+    "landscape": (704, 1280),
+    "portrait": (1280, 704),
+    "square": (960, 960),
+}
 # Wan's recommended default negative prompt (quality/artifact suppression).
 _NEGATIVE_PROMPT = (
     "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，"
@@ -215,6 +222,52 @@ class WanPipeline(ManagedPipeline):
         frames = result.frames[0]
         out_path.parent.mkdir(parents=True, exist_ok=True)
         export_to_video(frames, str(out_path), fps=_FPS)
+        return out_path
+
+    def generate_image(
+        self,
+        prompt: str,
+        orientation: str,
+        out_path: Path,
+        on_progress: Callable[[float], None],
+        seed: int | None = None,
+    ) -> Path:
+        """Generate a single frame and write it as a PNG. Blocking; run in a
+        worker thread."""
+        import numpy as np
+        import torch
+        from PIL import Image
+
+        if self._t2v is None or self._device != "cuda":
+            raise RuntimeError("Wan pipeline must be ON_GPU before generate_image()")
+
+        height, width = IMAGE_SIZES[orientation]
+        generator = torch.Generator(device=self._device)
+        if seed is not None:
+            generator.manual_seed(seed)
+
+        def step_callback(pipe: Any, step: int, timestep: Any, callback_kwargs: dict) -> dict:
+            on_progress((step + 1) / _INFERENCE_STEPS)
+            return callback_kwargs
+
+        log.info("generating image", extra={"orientation": orientation})
+        result = self._t2v(
+            prompt=prompt,
+            negative_prompt=_NEGATIVE_PROMPT,
+            height=height,
+            width=width,
+            num_frames=1,
+            num_inference_steps=_INFERENCE_STEPS,
+            guidance_scale=_GUIDANCE_SCALE,
+            generator=generator,
+            callback_on_step_end=step_callback,
+        )
+
+        frame = result.frames[0][0]
+        if frame.dtype != np.uint8:
+            frame = np.clip(np.rint(frame * 255), 0, 255).astype(np.uint8)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(frame).save(out_path)
         return out_path
 
     @staticmethod

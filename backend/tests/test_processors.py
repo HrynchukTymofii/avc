@@ -9,11 +9,12 @@ import pytest
 from app.config import Settings
 from app.pipelines.base import ManagedPipeline, PipelineState
 from app.pipelines.manager import ModelManager
-from app.queue.job import BrollParams, Job, TalkingHeadParams, new_job_id
+from app.queue.job import BrollParams, ImageParams, Job, TalkingHeadParams, new_job_id
 from app.schemas import JobKind
 from app.services import broll as broll_module
 from app.services import talking_head as talking_head_module
 from app.services.broll import BrollProcessor
+from app.services.image import ImageProcessor
 from app.services.talking_head import TalkingHeadProcessor
 from app.services.voices import VoiceRegistry
 from tests.test_voices import entry, write_voices_json, write_wav
@@ -71,6 +72,14 @@ class FakeWan(ManagedPipeline):
         on_progress(1.0)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_bytes(b"VIDEO")
+        return out_path
+
+    def generate_image(self, prompt, orientation, out_path, on_progress, seed=None):
+        self.last_call = {"prompt": prompt, "orientation": orientation}
+        on_progress(0.5)
+        on_progress(1.0)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_bytes(b"PNG")
         return out_path
 
 
@@ -217,6 +226,33 @@ async def test_broll_i2v_passes_reference_image(settings: Settings, stub_ffmpeg)
 
     await processor.process(job, ProgressLog())
     assert wan.last_call["image_path"] == ref
+
+
+async def test_image_flow(settings: Settings) -> None:
+    wan = FakeWan()
+    processor = ImageProcessor(build_manager(wan), settings)
+    job = Job(
+        id="job5",
+        kind=JobKind.IMAGE,
+        params=ImageParams(prompt="a lighthouse at dusk", orientation="portrait"),
+    )
+    progress = ProgressLog()
+
+    outputs = await processor.process(job, progress)
+
+    assert outputs == {"image": "/outputs/job5/output.png"}
+    assert (settings.outputs_dir / "job5" / "output.png").read_bytes() == b"PNG"
+    assert wan.last_call == {"prompt": "a lighthouse at dusk", "orientation": "portrait"}
+    assert progress.stages() == ["diffusion"]
+    values = [p for p, _ in progress.events]
+    assert values == sorted(values)
+
+
+def test_image_sizes_are_vae_compatible() -> None:
+    from app.pipelines.wan_pipeline import IMAGE_SIZES
+
+    for height, width in IMAGE_SIZES.values():
+        assert height % 16 == 0 and width % 16 == 0
 
 
 def test_wan_frame_count_is_valid_for_causal_vae() -> None:
