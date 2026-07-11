@@ -11,6 +11,45 @@ queue, and one GPU:
 
 Architecture details live in [ARCHITECTURE.md](ARCHITECTURE.md).
 
+## Writing scripts: voice emotion tags
+
+The S2 voice model understands inline **square-bracket tags** in the script —
+they are interpreted, not read aloud, and each tag affects the speech that
+comes **after** it. Use a few per paragraph, not one per sentence.
+
+- **Pauses & breath:** `[short pause]` `[pause]` `[long pause]` `[breath]`
+  `[sigh]` `[inhale]`
+- **Emotion:** `[excited]` `[sad]` `[angry]` `[surprised]` `[whisper]` — with
+  intensity: `[slightly sad]`, `[very excited]`
+- **Delivery:** `[emphasis]` `[low voice]` `[volume up]` `[laughing]`
+  `[chuckle]` `[professional broadcast tone]`
+- Free-form descriptions also work (open vocabulary), e.g.
+  `[whisper in small voice]`, `[pitch up]`.
+
+Example:
+
+```
+[professional broadcast tone] The future is closer than ever. [short pause]
+Every breakthrough opens new possibilities... [emphasis] and the innovations
+we build today [short pause] will shape future generations.
+```
+
+### Prompt block for LLM script writing
+
+Paste this into Claude/ChatGPT together with your topic to get scripts that
+arrive pre-tagged:
+
+> Write a voiceover script for [TOPIC], about [N] minutes when spoken.
+> Annotate it for an expressive TTS engine using inline square-bracket tags
+> that affect the speech after them. Available tags: [short pause], [pause],
+> [long pause], [breath], [sigh], [emphasis], [excited], [slightly excited],
+> [sad], [surprised], [whisper], [low voice], [volume up], [laughing],
+> [chuckle], and free-form delivery descriptions like [professional broadcast
+> tone]. Rules: set the overall tone with one tag at the start; use at most
+> 2–3 tags per paragraph; place each tag exactly where the delivery should
+> change; prefer pauses and emphasis over strong emotions unless the content
+> calls for them; never put a tag mid-word; output plain text only.
+
 ## Honest speed expectations
 
 On the target g6e.2xlarge (NVIDIA L40S, 48 GB VRAM, 64 GB RAM):
