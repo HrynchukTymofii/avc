@@ -19,7 +19,7 @@ The pipeline manager / job-kind pattern is the extension point: each of these is
 
 | Goal | Candidate | Why / constraints |
 |---|---|---|
-| Talking head **with head & body motion** (fixes the "frozen head" limitation of MuseTalk-on-a-photo) | **Wan2.2-S2V-14B** (official, HF `Wan-AI/Wan2.2-S2V-14B`, Apache 2.0) | Photo + audio → animated avatar video. 14B dense ≈ 28 GB bf16 — tight on the 44 GB L40S next to the other pipelines; comfortable on an 80 GB card. |
+| Talking head **with head & body motion**, premium tier | **Wan2.2-S2V-14B** (official, HF `Wan-AI/Wan2.2-S2V-14B`, Apache 2.0) | Photo + audio → fully speech-driven avatar video. 14B dense ≈ 28 GB bf16 — tight on the 44 GB L40S and diffusion-per-frame makes long scripts prohibitive there (~30–90 min GPU per minute of audio), so **decided 2026-07-11: build this on the H100 tier, not the L40S**. The everyday path is the built-in hybrid (`animate` flag: Wan idle clip + MuseTalk lip-sync), which scales to 20-min scripts. |
 | Animate a character image from a **driving video** | **Wan2.2-Animate-14B** (official, Apache 2.0) | Alternative/simpler path to head motion: record a short driving clip once, reuse per avatar. Same 14B sizing caveat. |
 | Higher-quality B-roll (fixes 5B motion artifacts: morphing limbs/faces) | **Wan2.2 T2V/I2V-A14B** (MoE, two 14B experts) | Needs ~80 GB VRAM in bf16. Not an L40S model. |
 | Higher-quality stills (text rendering, faces, fine detail) | **FLUX.1-dev** | ~24 GB bf16, fits the L40S; license is non-commercial (check before any paid service). |
