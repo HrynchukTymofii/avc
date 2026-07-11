@@ -14,7 +14,7 @@ from typing import Any
 
 from app.config import OffloadPolicy
 from app.pipelines.base import ManagedPipeline
-from app.pipelines.wan_pipeline import IMAGE_SIZES
+from app.pipelines.wan_pipeline import IMAGE_SIZES, _patch_native_attention_backend
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +49,9 @@ class FluxPipeline(ManagedPipeline):
         import torch
         from diffusers import FluxPipeline as DiffusersFluxPipeline
 
+        # Same torch-2.4 attention incompatibility as Wan (enable_gqa kwarg);
+        # the patch must run in whichever pipeline loads first.
+        _patch_native_attention_backend()
         if not self._checkpoint_dir.is_dir():
             raise RuntimeError(
                 f"FLUX.1-schnell checkpoint not found at {self._checkpoint_dir} — "
