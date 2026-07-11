@@ -75,9 +75,18 @@ class WanPipeline(ManagedPipeline):
                 "run scripts/download_models.sh first"
             )
         log.info("loading Wan2.2 TI2V-5B", extra={"checkpoint": str(self._checkpoint_dir)})
+        # diffusers 0.35 renamed torch_dtype -> dtype and silently drops the old
+        # name, so weights load as fp32 (~43 GB — OOMs the 44 GB L40S). Pass the
+        # new name and hard-cast as a backstop.
         self._t2v = DiffusersWanPipeline.from_pretrained(
-            str(self._checkpoint_dir), torch_dtype=torch.bfloat16
+            str(self._checkpoint_dir), dtype=torch.bfloat16
         )
+        if self._t2v.transformer.dtype != torch.bfloat16:
+            log.warning(
+                "checkpoint loaded as %s — casting to bfloat16",
+                self._t2v.transformer.dtype,
+            )
+            self._t2v.to(dtype=torch.bfloat16)
         # Second view over the same weights — supports image conditioning.
         self._i2v = WanImageToVideoPipeline.from_pipe(self._t2v)
         self._device = "cpu"
