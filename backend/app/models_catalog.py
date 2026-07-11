@@ -45,9 +45,11 @@ CATALOG: tuple[Engine, ...] = (
         "wan-5b", "Wan2.2 5B", JobKind.BROLL,
         "standard", "8 / clip", "wan", default=True,
     ),
+    # implemented=True but premium-gated: selectable the day an H100 box runs
+    # with PREMIUM_ENABLED=true. First run there is still a validation run.
     Engine(
         "wan-a14b", "Wan2.2 A14B — high quality", JobKind.BROLL,
-        "premium", "30 / clip", "wan-a14b", implemented=False,
+        "premium", "30 / clip", "wan-a14b",
     ),
     Engine(
         "wan-animate-14b", "Character video (Wan2.2-Animate-14B)", JobKind.BROLL,

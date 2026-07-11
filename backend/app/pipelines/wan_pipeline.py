@@ -142,7 +142,13 @@ class WanPipeline(ManagedPipeline):
         # No vae.enable_tiling(): diffusers 0.35's tiled decode is broken for
         # the Wan2.2 VAE (temporal-chunk shape mismatch in avg_shortcut).
         # Second view over the same weights — supports image conditioning.
-        self._i2v = WanImageToVideoPipeline.from_pipe(self._t2v)
+        # Non-fatal: some checkpoints (e.g. the A14B T2V expert pair) may not
+        # map onto the i2v pipeline; text-to-video still works without it.
+        try:
+            self._i2v = WanImageToVideoPipeline.from_pipe(self._t2v)
+        except Exception:
+            log.warning("i2v view unavailable for this checkpoint — reference images disabled")
+            self._i2v = None
         self._device = "cpu"
 
     def to_gpu(self) -> None:
@@ -219,6 +225,8 @@ class WanPipeline(ManagedPipeline):
             extra={"mode": "i2v" if image_path else "t2v", "frames": num_frames},
         )
         if image_path is not None:
+            if self._i2v is None:
+                raise ValueError("this model does not support reference images")
             result = self._i2v(image=self._prepare_image(image_path, width, height), **common)
         else:
             result = self._t2v(**common)
