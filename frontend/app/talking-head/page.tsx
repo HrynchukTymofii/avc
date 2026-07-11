@@ -23,6 +23,7 @@ import type { Voice } from "@/types/api";
 export default function TalkingHeadPage() {
   const [avatar, setAvatar] = useState<File | null>(null);
   const [voiceOnly, setVoiceOnly] = useState(false);
+  const [animate, setAnimate] = useState(false);
   const [script, setScript] = useState("");
   const [voices, setVoices] = useState<Voice[] | null>(null);
   const [voice, setVoice] = useState<string>("");
@@ -58,7 +59,7 @@ export default function TalkingHeadPage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const response = await submitTalkingHead({ avatar, script, voice, voiceOnly });
+      const response = await submitTalkingHead({ avatar, script, voice, voiceOnly, animate });
       setJobId(response.jobId);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Submission failed");
@@ -106,6 +107,17 @@ export default function TalkingHeadPage() {
               className="size-4 accent-primary"
             />
             Voice only — skip the video, just synthesize the narration
+          </label>
+
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={animate}
+              onChange={(event) => setAnimate(event.target.checked)}
+              disabled={busy || voiceOnly}
+              className="size-4 accent-primary"
+            />
+            Animated head — add subtle natural motion before lip-sync (+3–5 min)
           </label>
 
           <div className="space-y-1.5">

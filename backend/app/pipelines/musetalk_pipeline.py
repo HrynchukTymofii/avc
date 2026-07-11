@@ -1,14 +1,15 @@
-"""MuseTalk 1.5 as a managed pipeline (lip-sync a single avatar image to audio).
+"""MuseTalk 1.5 as a managed pipeline (lip-sync an avatar to audio).
 
 Integrates the MuseTalk repo (cloned at a pinned commit onto PYTHONPATH in the
 Docker image) the same way its own realtime inference script drives it:
 whisper audio features -> positional encoding -> UNet latent prediction ->
 VAE decode -> blend the animated mouth region back into the avatar frame.
 
-The avatar is one still image, so face detection, cropping, and VAE encoding
-happen once per job; the per-frame loop is UNet + decode + blend only. Output
-is a silent 25 fps video — the talking-head service muxes the speech track in
-with FFmpeg afterwards.
+The avatar is either one still image (face detection, cropping, and VAE
+encoding happen once per job) or a short driving video (per-frame preparation,
+then the clip is ping-pong looped to cover the audio) — the per-frame loop is
+UNet + decode + blend either way. Output is a silent 25 fps video — the
+talking-head service muxes the speech track in with FFmpeg afterwards.
 """
 
 from __future__ import annotations
@@ -25,6 +26,20 @@ log = logging.getLogger(__name__)
 
 _FPS = 25
 _BATCH_SIZE = 8
+
+
+def _pingpong_cycle(n: int) -> Callable[[int], int]:
+    """Map a running frame index onto 0..n-1..0 so a short driving clip loops
+    without a visible jump cut."""
+    if n == 1:
+        return lambda i: 0
+    period = 2 * (n - 1)
+
+    def cycle(i: int) -> int:
+        j = i % period
+        return j if j < n else period - j
+
+    return cycle
 
 
 class MuseTalkPipeline(ManagedPipeline):
@@ -127,15 +142,17 @@ class MuseTalkPipeline(ManagedPipeline):
         audio_path: Path,
         out_path: Path,
         on_progress: Callable[[float], None],
+        driving_video_path: Path | None = None,
     ) -> Path:
-        """Lip-sync the avatar image to the audio; writes a silent 25 fps video
-        to out_path. Blocking; run in a worker thread."""
+        """Lip-sync the avatar to the audio; writes a silent 25 fps video to
+        out_path. With driving_video_path, the mouth is repainted on that clip
+        (ping-pong looped over the audio) instead of a frozen still. Blocking;
+        run in a worker thread."""
         import cv2
         import numpy as np
         import torch
         from musetalk.utils.blending import get_image
         from musetalk.utils.face_parsing import FaceParsing
-        from musetalk.utils.preprocessing import get_landmark_and_bbox
         from musetalk.utils.utils import datagen
 
         if self._unet is None or self._device != "cuda":
@@ -143,24 +160,17 @@ class MuseTalkPipeline(ManagedPipeline):
         if self._face_parser is None:
             self._face_parser = FaceParsing()
 
-        frame = cv2.imread(str(avatar_path))
-        if frame is None:
-            raise ValueError("avatar image could not be read")
-
-        # -- one-time avatar preparation ------------------------------------------
-        coord_list, frame_list = get_landmark_and_bbox([str(avatar_path)], 0)
-        bbox = coord_list[0]
-        if bbox is None or -1 in bbox:
-            raise ValueError(
-                "no face detected in the avatar image — use a clear, front-facing portrait"
+        # -- per-frame preparation (one frame for a still avatar) -------------------
+        if driving_video_path is not None:
+            frames, coords, latents = self._prepare_frames(
+                self._read_video_frames(driving_video_path)
             )
-        x1, y1, x2, y2 = bbox
-        # v1.5 extends the crop below the chin so the jaw stays inside the
-        # animated region (upstream inference.py: extra_margin=10).
-        y2 = min(y2 + 10, frame.shape[0])
-        crop = frame_list[0][y1:y2, x1:x2]
-        crop = cv2.resize(crop, (256, 256), interpolation=cv2.INTER_LANCZOS4)
-        input_latent = self._vae.get_latents_for_unet(crop)
+        else:
+            frame = cv2.imread(str(avatar_path))
+            if frame is None:
+                raise ValueError("avatar image could not be read")
+            frames, coords, latents = self._prepare_frames([frame])
+        cycle = _pingpong_cycle(len(frames))
 
         # -- audio features ----------------------------------------------------------
         weight_dtype = self._unet.model.dtype
@@ -180,7 +190,7 @@ class MuseTalkPipeline(ManagedPipeline):
             raise RuntimeError("audio produced no feature frames")
 
         # -- frame loop ----------------------------------------------------------------
-        height, width = frame.shape[:2]
+        height, width = frames[0].shape[:2]
         out_path.parent.mkdir(parents=True, exist_ok=True)
         writer = cv2.VideoWriter(
             str(out_path), cv2.VideoWriter_fourcc(*"mp4v"), _FPS, (width, height)
@@ -188,7 +198,7 @@ class MuseTalkPipeline(ManagedPipeline):
         try:
             timesteps = torch.tensor([0], device=self._device)
             latent_batches = datagen(
-                whisper_chunks, [input_latent] * total_frames, _BATCH_SIZE
+                whisper_chunks, [latents[cycle(i)] for i in range(total_frames)], _BATCH_SIZE
             )
             done = 0
             with torch.inference_mode():
@@ -200,18 +210,78 @@ class MuseTalkPipeline(ManagedPipeline):
                     ).sample
                     recon_frames = self._vae.decode_latents(pred_latents)
                     for res_frame in recon_frames:
+                        x1, y1, x2, y2 = coords[cycle(done)]
                         res_frame = cv2.resize(
                             np.asarray(res_frame, dtype=np.uint8), (x2 - x1, y2 - y1)
                         )
                         composed = get_image(
-                            frame, res_frame, [x1, y1, x2, y2],
+                            frames[cycle(done)], res_frame, [x1, y1, x2, y2],
                             mode="jaw", fp=self._face_parser,
                         )
                         writer.write(composed)
-                    done += len(recon_frames)
+                        done += 1
                     on_progress(min(1.0, done / total_frames))
         finally:
             writer.release()
 
-        log.info("lip-sync rendered", extra={"frames": total_frames, "fps": _FPS})
+        log.info(
+            "lip-sync rendered",
+            extra={"frames": total_frames, "fps": _FPS, "driving_frames": len(frames)},
+        )
         return out_path
+
+    @staticmethod
+    def _read_video_frames(video_path: Path) -> list[Any]:
+        import cv2
+
+        capture = cv2.VideoCapture(str(video_path))
+        frames = []
+        while True:
+            ok, frame = capture.read()
+            if not ok:
+                break
+            frames.append(frame)
+        capture.release()
+        if not frames:
+            raise ValueError("driving video could not be read or has no frames")
+        return frames
+
+    def _prepare_frames(self, frames: list[Any]) -> tuple[list[Any], list[Any], list[Any]]:
+        """Face bbox + 256x256 crop latent per frame. get_landmark_and_bbox only
+        takes file paths, so frames go through a temp dir. Frames where detection
+        fails borrow the nearest detected bbox (idle clips have near-static
+        framing, so neighbouring boxes are interchangeable)."""
+        import tempfile
+
+        import cv2
+        from musetalk.utils.preprocessing import get_landmark_and_bbox
+
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = []
+            for index, frame in enumerate(frames):
+                path = f"{tmp}/{index:05d}.png"
+                cv2.imwrite(path, frame)
+                paths.append(path)
+            coord_list, frame_list = get_landmark_and_bbox(paths, 0)
+
+        valid = [
+            (i, bbox) for i, bbox in enumerate(coord_list) if bbox is not None and -1 not in bbox
+        ]
+        if not valid:
+            raise ValueError(
+                "no face detected — use a clear, front-facing portrait"
+                if len(frames) == 1
+                else "no face detected in the motion clip frames"
+            )
+        coords, latents = [], []
+        for index, frame in enumerate(frame_list):
+            bbox = min(valid, key=lambda item: abs(item[0] - index))[1]
+            x1, y1, x2, y2 = bbox
+            # v1.5 extends the crop below the chin so the jaw stays inside the
+            # animated region (upstream inference.py: extra_margin=10).
+            y2 = min(y2 + 10, frame.shape[0])
+            crop = frame[y1:y2, x1:x2]
+            crop = cv2.resize(crop, (256, 256), interpolation=cv2.INTER_LANCZOS4)
+            coords.append((x1, y1, x2, y2))
+            latents.append(self._vae.get_latents_for_unet(crop))
+        return frame_list, coords, latents

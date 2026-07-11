@@ -6,11 +6,12 @@ export interface JobCreatedResponse {
   jobId: string;
 }
 
-export type Stage = "tts" | "lip-sync" | "encoding" | "diffusion" | "starting";
+export type Stage = "tts" | "motion" | "lip-sync" | "encoding" | "diffusion" | "starting";
 
 export const STAGE_LABELS: Record<Stage, string> = {
   starting: "Starting",
   tts: "Generating speech",
+  motion: "Generating head motion",
   "lip-sync": "Animating avatar",
   diffusion: "Generating", // shared by video and image jobs
   encoding: "Encoding video",

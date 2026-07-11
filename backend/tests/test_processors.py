@@ -41,15 +41,19 @@ class FakeS2(ManagedPipeline):
 class FakeMuseTalk(ManagedPipeline):
     def __init__(self) -> None:
         super().__init__("musetalk", vram_estimate_gb=6, vram_peak_gb=8, offload_policy="cpu")
+        self.last_driving_video = None
 
     def load(self) -> None: ...
     def to_gpu(self) -> None: ...
     def to_cpu(self) -> None: ...
     def unload(self) -> None: ...
 
-    def generate(self, avatar_path, audio_path, out_path, on_progress):
+    def generate(self, avatar_path, audio_path, out_path, on_progress, driving_video_path=None):
         assert Path(avatar_path).is_file()
         assert Path(audio_path).is_file()  # speech must exist before lip-sync
+        if driving_video_path is not None:
+            assert Path(driving_video_path).is_file()  # motion clip must exist first
+        self.last_driving_video = driving_video_path
         on_progress(1.0)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_bytes(b"VIDEO")
@@ -66,8 +70,15 @@ class FakeWan(ManagedPipeline):
     def to_cpu(self) -> None: ...
     def unload(self) -> None: ...
 
-    def generate(self, prompt, duration_s, image_path, out_path, on_progress, seed=None):
-        self.last_call = {"prompt": prompt, "duration_s": duration_s, "image_path": image_path}
+    def generate(
+        self, prompt, duration_s, image_path, out_path, on_progress, seed=None, orientation=None
+    ):
+        self.last_call = {
+            "prompt": prompt,
+            "duration_s": duration_s,
+            "image_path": image_path,
+            "orientation": orientation,
+        }
         on_progress(0.25)
         on_progress(1.0)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -189,6 +200,50 @@ async def test_talking_head_fails_cleanly_on_deleted_voice(
     )
     with pytest.raises(ValueError, match="no longer available"):
         await processor.process(job, ProgressLog())
+
+
+async def test_talking_head_animate_flow(settings: Settings, stub_ffmpeg) -> None:
+    from PIL import Image
+
+    assets = settings.assets_dir
+    write_wav(assets / "voices" / "en-test.wav")
+    write_voices_json(assets, [entry()])
+    voices = VoiceRegistry(assets)
+    voices.load()
+
+    s2, musetalk, wan = FakeS2(), FakeMuseTalk(), FakeWan()
+    processor = TalkingHeadProcessor(build_manager(s2, musetalk, wan), voices, settings)
+
+    avatar = settings.outputs_dir / "job6" / "inputs" / "avatar.png"
+    avatar.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (400, 600)).save(avatar)  # portrait aspect
+    job = Job(
+        id="job6",
+        kind=JobKind.TALKING_HEAD,
+        params=TalkingHeadParams(
+            avatar_path=avatar, script="Hello world.", voice_id="en-test", animate=True
+        ),
+    )
+    progress = ProgressLog()
+
+    outputs = await processor.process(job, progress)
+
+    assert outputs["video"] == "/outputs/job6/output.mp4"
+    assert progress.stages() == ["tts", "motion", "lip-sync", "encoding"]
+    assert wan.last_call["image_path"] == avatar
+    assert wan.last_call["orientation"] == "portrait"
+    assert musetalk.last_driving_video == settings.outputs_dir / "job6" / "idle_motion.mp4"
+    values = [p for p, _ in progress.events]
+    assert values == sorted(values)  # progress never goes backwards
+
+
+def test_pingpong_cycle_loops_without_jump() -> None:
+    from app.pipelines.musetalk_pipeline import _pingpong_cycle
+
+    cycle = _pingpong_cycle(4)
+    assert [cycle(i) for i in range(10)] == [0, 1, 2, 3, 2, 1, 0, 1, 2, 3]
+    single = _pingpong_cycle(1)
+    assert [single(i) for i in range(3)] == [0, 0, 0]
 
 
 async def test_broll_t2v_flow(settings: Settings, stub_ffmpeg) -> None:

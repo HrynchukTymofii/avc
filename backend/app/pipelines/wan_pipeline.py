@@ -180,15 +180,18 @@ class WanPipeline(ManagedPipeline):
         out_path: Path,
         on_progress: Callable[[float], None],
         seed: int | None = None,
+        orientation: str | None = None,
     ) -> Path:
         """Generate a clip and write it (H.264 re-encode happens in the service).
-        Blocking; run in a worker thread."""
+        Blocking; run in a worker thread. `orientation` (a key of IMAGE_SIZES)
+        overrides the default landscape canvas."""
         import torch
         from diffusers.utils import export_to_video
 
         if self._t2v is None or self._device != "cuda":
             raise RuntimeError("Wan pipeline must be ON_GPU before generate()")
 
+        height, width = IMAGE_SIZES[orientation] if orientation else (_HEIGHT, _WIDTH)
         num_frames = frames_for_duration(duration_s)
         generator = torch.Generator(device=self._device)
         if seed is not None:
@@ -201,8 +204,8 @@ class WanPipeline(ManagedPipeline):
         common: dict[str, Any] = dict(
             prompt=prompt,
             negative_prompt=_NEGATIVE_PROMPT,
-            height=_HEIGHT,
-            width=_WIDTH,
+            height=height,
+            width=width,
             num_frames=num_frames,
             num_inference_steps=_INFERENCE_STEPS,
             guidance_scale=_GUIDANCE_SCALE,
@@ -215,7 +218,7 @@ class WanPipeline(ManagedPipeline):
             extra={"mode": "i2v" if image_path else "t2v", "frames": num_frames},
         )
         if image_path is not None:
-            result = self._i2v(image=self._prepare_image(image_path), **common)
+            result = self._i2v(image=self._prepare_image(image_path, width, height), **common)
         else:
             result = self._t2v(**common)
 
@@ -271,11 +274,11 @@ class WanPipeline(ManagedPipeline):
         return out_path
 
     @staticmethod
-    def _prepare_image(image_path: Path) -> Any:
-        """Fit the reference image to the native 1280x704 canvas (cover + center-crop)
+    def _prepare_image(image_path: Path, width: int, height: int) -> Any:
+        """Fit the reference image to the target canvas (cover + center-crop)
         so conditioning matches the output aspect ratio."""
         from PIL import Image, ImageOps
 
         with Image.open(image_path) as image:
             image = ImageOps.exif_transpose(image).convert("RGB")
-            return ImageOps.fit(image, (_WIDTH, _HEIGHT), Image.Resampling.LANCZOS)
+            return ImageOps.fit(image, (width, height), Image.Resampling.LANCZOS)

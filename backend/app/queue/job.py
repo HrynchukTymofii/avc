@@ -32,6 +32,9 @@ class TalkingHeadParams:
     script: str
     voice_id: str
     voice_only: bool = False
+    # animate: synthesize a Wan idle-motion clip from the avatar first and
+    # lip-sync onto it, instead of onto the frozen still.
+    animate: bool = False
 
 
 @dataclass

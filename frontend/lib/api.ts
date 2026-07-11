@@ -41,12 +41,14 @@ export async function submitTalkingHead(input: {
   script: string;
   voice: string;
   voiceOnly?: boolean;
+  animate?: boolean;
 }): Promise<JobCreatedResponse> {
   const form = new FormData();
   if (input.avatar) form.append("avatar", input.avatar);
   form.append("script", input.script);
   form.append("voice", input.voice);
   if (input.voiceOnly) form.append("voice_only", "true");
+  if (input.animate) form.append("animate", "true");
   return handle(await fetch("/api/talking-head", { method: "POST", body: form }));
 }
 

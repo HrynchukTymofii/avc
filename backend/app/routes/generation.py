@@ -36,6 +36,7 @@ async def create_talking_head(
     voice: Annotated[str, Form()],
     avatar: Annotated[UploadFile | None, File()] = None,
     voice_only: Annotated[bool, Form()] = False,
+    animate: Annotated[bool, Form()] = False,
 ) -> JobCreatedResponse:
     script = validate_text(script, field="script", max_chars=settings.max_script_chars)
     if voices.get(voice) is None:
@@ -61,7 +62,11 @@ async def create_talking_head(
         id=job_id,
         kind=JobKind.TALKING_HEAD,
         params=TalkingHeadParams(
-            avatar_path=avatar_path, script=script, voice_id=voice, voice_only=voice_only
+            avatar_path=avatar_path,
+            script=script,
+            voice_id=voice,
+            voice_only=voice_only,
+            animate=animate and not voice_only,
         ),
         label=_label(script),
     )
