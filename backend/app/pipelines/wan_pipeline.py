@@ -75,18 +75,29 @@ class WanPipeline(ManagedPipeline):
                 "run scripts/download_models.sh first"
             )
         log.info("loading Wan2.2 TI2V-5B", extra={"checkpoint": str(self._checkpoint_dir)})
-        # diffusers 0.35 renamed torch_dtype -> dtype and silently drops the old
-        # name, so weights load as fp32 (~43 GB — OOMs the 44 GB L40S). Pass the
-        # new name and hard-cast as a backstop.
+        # dtype kwargs are unreliable across this diffusers/transformers combo:
+        # the fp32 text encoder (~23 GB on disk) kept coming out fp32 even after
+        # a pipeline-level .to(dtype), OOMing the 44 GB L40S. Cast each module
+        # directly — nn.Module.to() can't be silently skipped.
         self._t2v = DiffusersWanPipeline.from_pretrained(
-            str(self._checkpoint_dir), dtype=torch.bfloat16
+            str(self._checkpoint_dir), torch_dtype=torch.bfloat16
         )
-        if self._t2v.transformer.dtype != torch.bfloat16:
-            log.warning(
-                "checkpoint loaded as %s — casting to bfloat16",
-                self._t2v.transformer.dtype,
-            )
-            self._t2v.to(dtype=torch.bfloat16)
+        for name in ("transformer", "text_encoder", "vae"):
+            module = getattr(self._t2v, name)
+            dtype = next(module.parameters()).dtype
+            if dtype != torch.bfloat16:
+                log.warning("%s loaded as %s — casting to bfloat16", name, dtype)
+                module.to(dtype=torch.bfloat16)
+        log.info(
+            "wan component dtypes",
+            extra={
+                name: str(next(getattr(self._t2v, name).parameters()).dtype)
+                for name in ("transformer", "text_encoder", "vae")
+            },
+        )
+        # Tiled VAE decode: full 73-frame 704x1280 decode can spike VRAM at the
+        # very end of a run; tiling trades a little speed for safety.
+        self._t2v.vae.enable_tiling()
         # Second view over the same weights — supports image conditioning.
         self._i2v = WanImageToVideoPipeline.from_pipe(self._t2v)
         self._device = "cpu"
