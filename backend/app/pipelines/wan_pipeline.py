@@ -33,6 +33,41 @@ _NEGATIVE_PROMPT = (
 )
 
 
+def _patch_native_attention_backend() -> None:
+    """diffusers 0.35's NATIVE attention backend passes enable_gqa to
+    F.scaled_dot_product_attention unconditionally in its body; torch < 2.5
+    (our pin, for the mmcv wheel matrix) rejects the kwarg with a TypeError.
+    Re-register the backend without it — enable_gqa is a perf hint, not a
+    behavior change, and Wan's attention is not grouped-query anyway."""
+    import torch
+    from diffusers.models import attention_dispatch
+
+    def _native_attention_no_gqa(
+        query: Any,
+        key: Any,
+        value: Any,
+        attn_mask: Any = None,
+        dropout_p: float = 0.0,
+        is_causal: bool = False,
+        scale: float | None = None,
+        enable_gqa: bool = False,
+    ) -> Any:
+        query, key, value = (x.permute(0, 2, 1, 3) for x in (query, key, value))
+        out = torch.nn.functional.scaled_dot_product_attention(
+            query=query,
+            key=key,
+            value=value,
+            attn_mask=attn_mask,
+            dropout_p=dropout_p,
+            is_causal=is_causal,
+            scale=scale,
+        )
+        return out.permute(0, 2, 1, 3)
+
+    registry = attention_dispatch._AttentionBackendRegistry
+    registry._backends[attention_dispatch.AttentionBackendName.NATIVE] = _native_attention_no_gqa
+
+
 def frames_for_duration(duration_s: int) -> int:
     """Valid frame count (4k+1, required by the causal VAE) for the requested
     duration at 24 fps: 3/4/5 s -> 73/97/121."""
@@ -69,6 +104,7 @@ class WanPipeline(ManagedPipeline):
         from diffusers import WanImageToVideoPipeline
         from diffusers import WanPipeline as DiffusersWanPipeline
 
+        _patch_native_attention_backend()
         if not self._checkpoint_dir.is_dir():
             raise RuntimeError(
                 f"Wan2.2 checkpoint not found at {self._checkpoint_dir} — "
