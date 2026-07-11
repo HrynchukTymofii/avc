@@ -39,7 +39,10 @@ class Settings(BaseSettings):
 
     wan_variant: str = "ti2v-5b"
     vram_reserve_gb: float = 2.0
-    s2_offload: OffloadPolicy = "cpu"
+    # S2 evicted-from-GPU weights are dropped, not parked in RAM: the animate
+    # flow needs Wan (~24 GB) in RAM at the same moment S2 is evicted, and the
+    # pair swap-froze the 64 GB host. Reload from warm page cache is <1 min.
+    s2_offload: OffloadPolicy = "unload"
     musetalk_offload: OffloadPolicy = "cpu"
     wan_offload: OffloadPolicy = "cpu"
     # FLUX is ~34 GB in bf16 — parking it in CPU RAM next to Wan would blow the
