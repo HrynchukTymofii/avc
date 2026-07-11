@@ -13,12 +13,13 @@ Architecture details live in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Honest speed expectations
 
-On the target g6e.xlarge (NVIDIA L40S, 48 GB VRAM):
+On the target g6e.2xlarge (NVIDIA L40S, 48 GB VRAM, 64 GB RAM):
 
 | Job | Time |
 |---|---|
 | Talking head | ≈ 1–3 minutes of processing **per minute of script** |
 | B-roll clip (5 s, 704×1280) | ≈ 3–8 minutes per clip |
+| Still image (Wan single-frame) | ≈ 1 minute once the model is warm |
 | First job after a restart | + 1–2 minutes (models load lazily on first use) |
 
 Queue a batch and collect results from the "Recent generations" grid — jobs
@@ -72,18 +73,20 @@ you want (the clone inherits accent and style).
 
 ---
 
-## 2. AWS deployment (g6e.xlarge)
+## 2. AWS deployment (g6e.2xlarge)
 
 ### 2.0 Before you start
 
 - **Request a GPU quota.** New AWS accounts have 0 vCPUs for G-type instances:
   AWS Console → Service Quotas → EC2 → "Running On-Demand G and VT instances" →
-  request **4 vCPUs**. Approval takes hours to ~a day, so do this first.
-- **Cost:** g6e.xlarge is ≈ $1.9/hour on demand. **Stop the instance whenever
-  you're not generating** — that's the difference between ~$10 and ~$1,400 a
-  month. Files, models, and the Elastic IP survive stop/start. (g6e.2xlarge is
-  the upgrade if CPU/RAM ever bottlenecks; multi-GPU instances are pointless
-  for this app — the queue uses one GPU.)
+  request **8 vCPUs**. Approval takes hours to ~a day, so do this first.
+- **Cost:** g6e.2xlarge is ≈ $2.3/hour on demand. **Stop the instance whenever
+  you're not generating** — that's the difference between ~$10 and ~$1,600 a
+  month. Files, models, and the Elastic IP survive stop/start.
+- **Why not the cheaper g6e.xlarge:** its 32 GB of system RAM is not enough —
+  Wan2.2 stages ~24 GB of weights through CPU RAM and a 32 GB host swap-freezes
+  hard enough to kill SSH (verified the hard way). 64 GB is the floor.
+  Multi-GPU instances are pointless for this app — the queue uses one GPU.
 
 ### 2.1 Launch the instance
 
@@ -94,7 +97,7 @@ you want (the clone inherits accent and style).
      step 2.2.
    - *Plain:* **Ubuntu Server 22.04 LTS** — install the driver and toolkit
      yourself in step 2.2.
-3. Instance type: **g6e.xlarge**.
+3. Instance type: **g6e.2xlarge**.
 4. Storage: **300 GB gp3** root volume (weights ~55 GB + Docker images + outputs).
 5. Security group: inbound **22** (your IP only), **80**, **443**. Nothing else.
 6. After launch: **Elastic IPs → Allocate → Associate** with the instance, so
@@ -241,7 +244,8 @@ ssh -L 3000:localhost:3000 ubuntu@<elastic-ip>
 |---|---|
 | `POST /api/talking-head` | multipart: `avatar` (PNG/JPEG ≤ 20 MB), `script` (≤ 20k chars), `voice` → `{"jobId"}` |
 | `POST /api/broll` | multipart: `prompt` (≤ 1k chars), `duration` (3–5), optional `image` → `{"jobId"}` |
-| `GET /api/status/{jobId}` | `{"status":"queued","position":1}` / `{"status":"processing","progress":62,"stage":"lip-sync"}` / `{"status":"finished","video":...,"audio":...}` / `{"status":"failed","error":...}` |
+| `POST /api/image` | multipart: `prompt` (≤ 1k chars), `orientation` (`landscape`\|`portrait`\|`square`) → `{"jobId"}` |
+| `GET /api/status/{jobId}` | `{"status":"queued","position":1}` / `{"status":"processing","progress":62,"stage":"lip-sync"}` / `{"status":"finished","video":...,"audio":...,"image":...}` / `{"status":"failed","error":...}` |
 | `GET /api/jobs?kind=&limit=` | recent jobs for the UI grids |
 | `GET /api/voices` | configured voice presets |
 | `GET /outputs/{jobId}/...` | generated files (static) |

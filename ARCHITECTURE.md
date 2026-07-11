@@ -9,8 +9,26 @@ Design document for the MVP described in `AI_Video_Studio_MVP_Plan.md`. No imple
 | Voiceover (text-to-speech, voice cloning) | **Fish Audio S2 Pro** (self-hosted open weights) | GPU pipeline `s2_pipeline.py` |
 | Talking head (lip-sync animation) | **MuseTalk 1.5** | GPU pipeline `musetalk_pipeline.py` |
 | B-roll (text/image-to-video) | **Wan2.2 TI2V-5B** | GPU pipeline `wan_pipeline.py` |
+| Still images (text-to-image) | **Wan2.2 TI2V-5B**, single frame (`num_frames=1`) | same `wan_pipeline.py`, `generate_image()` |
 
-A talking-head job uses S2 Pro **then** MuseTalk (speech first, then lip-sync against the audio); a B-roll job uses Wan2.2 only. All three are managed by the same model manager (section 3) and fed by the same sequential queue (section 2).
+A talking-head job uses S2 Pro **then** MuseTalk (speech first, then lip-sync against the audio); B-roll and image jobs use Wan2.2 only. All pipelines are managed by the same model manager (section 3) and fed by the same sequential queue (section 2).
+
+## Roadmap — candidate models (researched, not built)
+
+The pipeline manager / job-kind pattern is the extension point: each of these is a new `ManagedPipeline` + processor + route + page, exactly like the image generator was added on top of Wan.
+
+| Goal | Candidate | Why / constraints |
+|---|---|---|
+| Talking head **with head & body motion** (fixes the "frozen head" limitation of MuseTalk-on-a-photo) | **Wan2.2-S2V-14B** (official, HF `Wan-AI/Wan2.2-S2V-14B`, Apache 2.0) | Photo + audio → animated avatar video. 14B dense ≈ 28 GB bf16 — tight on the 44 GB L40S next to the other pipelines; comfortable on an 80 GB card. |
+| Animate a character image from a **driving video** | **Wan2.2-Animate-14B** (official, Apache 2.0) | Alternative/simpler path to head motion: record a short driving clip once, reuse per avatar. Same 14B sizing caveat. |
+| Higher-quality B-roll (fixes 5B motion artifacts: morphing limbs/faces) | **Wan2.2 T2V/I2V-A14B** (MoE, two 14B experts) | Needs ~80 GB VRAM in bf16. Not an L40S model. |
+| Higher-quality stills (text rendering, faces, fine detail) | **FLUX.1-dev** | ~24 GB bf16, fits the L40S; license is non-commercial (check before any paid service). |
+
+**GPU tiers:** the L40S (g6e.2xlarge, ≈$2.3/h) stays the everyday tier and runs everything currently built. The 14B/A14B roadmap models want a single **H100 80 GB** — AWS P-family (separate quota, starts at 0, ≈$4+/h) or per-hour rentals (RunPod/Lambda). Treat H100 hours as a "quality tier" for batches, keep the cost model stop-when-idle.
+
+**Versions beyond Wan 2.2:** Wan 2.5/2.6/2.7 are API-only (Alibaba's hosted platform) — no open weights as of 2026-07. Anything on HF claiming otherwise is a community re-upload; the official `Wan-AI` org is the source of truth.
+
+**Licensing gate for any public/paid service:** S2 Pro is research-license (non-commercial); FLUX.1-dev likewise; MuseTalk needs a license review. Wan 2.2 family is Apache 2.0 throughout.
 
 ## Decisions locked in (from planning Q&A)
 
