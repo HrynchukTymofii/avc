@@ -12,5 +12,19 @@
     "language": "en",
     "ref_audio": "voices/en-female-zira.wav",
     "ref_text": "The quick brown fox jumps over the lazy dog, but nobody stops to ask why the dog was so tired in the first place. Every morning, the harbour fills with small boats, their sails catching the early light as fishermen call out to one another across the water. Numbers like three hundred forty seven and twelve point five help capture the full range of natural speech."
+  },
+  {
+    "id": "tim-en",
+    "name": "Tim (English)",
+    "language": "en",
+    "ref_audio": "voices/tim_en.wav",
+    "ref_text": "Some of the most important decisions of our lives occur while we're feeling stressed and anxious. From medical decisions to financial and professional ones, we are all sometimes required to weigh up information under stressful conditions. But do we become better or worse at processing and using information under such"
+  },
+  {
+    "id": "john-en",
+    "name": "John (English)",
+    "language": "en",
+    "ref_audio": "voices/john_en.wav",
+    "ref_text": "The future is closer than ever. Artificial intelligence is transforming the way we create, work, and live. Every breakthrough opens new possibilities, from intelligent robots and autonomous machines to immersive virtual worlds and clean energy solutions. Technology is changing faster than ever before, and the innovations we build today will shape the lives of future generations."
   }
 ]
