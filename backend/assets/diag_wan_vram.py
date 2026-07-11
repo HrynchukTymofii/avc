@@ -48,12 +48,16 @@ def main() -> None:
     for name in COMPONENTS:
         print(f"i2v shares {name}: {getattr(i2v, name) is getattr(pipe, name)}")
 
-    pipe.to("cuda")
+    # Explicit dtype in the same call — plain .to("cuda") upcasts these models
+    # to fp32 in this environment (verified: 23 GB bf16 became 43 GB fp32).
+    pipe.to("cuda", torch.bfloat16)
     free, total = torch.cuda.mem_get_info()
     print(
-        f"after to(cuda): free={free / GB:.2f} GB of {total / GB:.2f} GB, "
+        f"after to(cuda, bfloat16): free={free / GB:.2f} GB of {total / GB:.2f} GB, "
         f"torch_allocated={torch.cuda.memory_allocated() / GB:.2f} GB"
     )
+    for name in COMPONENTS:
+        print(f"{name} first param dtype on GPU: {next(getattr(pipe, name).parameters()).dtype}")
     for name in COMPONENTS:
         print(f"{name} weights on GPU: {cuda_param_gb(getattr(pipe, name)):.2f} GB")
     for name in COMPONENTS:
