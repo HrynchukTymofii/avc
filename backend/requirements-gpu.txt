@@ -12,6 +12,9 @@ safetensors>=0.4
 # `builder` module transformers/diffusers need); upstream forces the same
 # floor via uv overrides, which pip ignores.
 protobuf>=3.20.3,<5
+# FLUX's T5 tokenizer ships slow-format (spiece.model); converting it to the
+# fast tokenizer at load time requires sentencepiece.
+sentencepiece>=0.2
 
 # Audio
 soundfile>=0.12
