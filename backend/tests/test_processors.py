@@ -321,6 +321,30 @@ async def test_image_flow(settings: Settings) -> None:
     assert values == sorted(values)
 
 
+async def test_image_flow_multiple_variations(settings: Settings) -> None:
+    wan = FakeWan()
+    processor = ImageProcessor(build_manager(wan), settings)
+    job = Job(
+        id="job8",
+        kind=JobKind.IMAGE,
+        params=ImageParams(prompt="a lighthouse", orientation="landscape", count=3),
+    )
+    progress = ProgressLog()
+
+    outputs = await processor.process(job, progress)
+
+    assert outputs == {
+        "image": "/outputs/job8/output_1.png",
+        "image_2": "/outputs/job8/output_2.png",
+        "image_3": "/outputs/job8/output_3.png",
+    }
+    for name in ("output_1.png", "output_2.png", "output_3.png"):
+        assert (settings.outputs_dir / "job8" / name).is_file()
+    values = [p for p, _ in progress.events]
+    assert values == sorted(values)  # progress never goes backwards across images
+    assert values[-1] <= 95
+
+
 async def test_image_flow_dispatches_to_flux(settings: Settings) -> None:
     wan, flux = FakeWan(), FakeFlux()
     processor = ImageProcessor(build_manager(wan, flux), settings)

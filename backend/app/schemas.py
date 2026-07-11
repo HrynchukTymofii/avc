@@ -69,6 +69,8 @@ class FinishedStatus(BaseModel):
     video: str | None = None
     audio: str | None = None
     image: str | None = None
+    # All generated images for multi-image jobs (image holds the first one).
+    images: list[str] | None = None
 
 
 class FailedStatus(BaseModel):

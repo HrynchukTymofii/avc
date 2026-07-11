@@ -30,22 +30,34 @@ class ImageProcessor:
         params = job.params
         assert isinstance(params, ImageParams)
 
-        out_path = self._settings.outputs_dir / job.id / "output.png"
-        seed = random.randrange(2**31)
-
         engine = get_engine(JobKind.IMAGE, params.model)
         pipeline_name = engine.pipeline if engine else "wan"
+        count = max(1, params.count)
 
+        urls: list[str] = []
         report(0, "diffusion")
         async with self._manager.acquire(pipeline_name) as pipe:
-            await asyncio.to_thread(
-                pipe.generate_image,
-                prompt=params.prompt,
-                orientation=params.orientation,
-                out_path=out_path,
-                on_progress=lambda f: report(int(f * _DIFFUSION_END), "diffusion"),
-                seed=seed,
-            )
+            for index in range(count):
+                name = f"output_{index + 1}.png" if count > 1 else "output.png"
+                seed = random.randrange(2**31)
 
-        log.info("image complete", extra={"job_id": job.id, "seed": seed})
-        return {"image": f"/outputs/{job.id}/output.png"}
+                def on_progress(fraction: float, done: int = index) -> None:
+                    report(int((done + fraction) / count * _DIFFUSION_END), "diffusion")
+
+                await asyncio.to_thread(
+                    pipe.generate_image,
+                    prompt=params.prompt,
+                    orientation=params.orientation,
+                    out_path=self._settings.outputs_dir / job.id / name,
+                    on_progress=on_progress,
+                    seed=seed,
+                )
+                urls.append(f"/outputs/{job.id}/{name}")
+
+        log.info("images complete", extra={"job_id": job.id, "count": count})
+        # First image under the classic key; extras as image_2.. so the outputs
+        # dict stays str->str for snapshots. The status route reassembles the list.
+        outputs = {"image": urls[0]}
+        for position, url in enumerate(urls[1:], start=2):
+            outputs[f"image_{position}"] = url
+        return outputs

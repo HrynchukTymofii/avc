@@ -23,6 +23,18 @@ from app.schemas import (
 router = APIRouter(prefix="/api", tags=["status"])
 
 
+def _image_urls(outputs: dict[str, str]) -> list[str] | None:
+    """Reassemble the image list from the flat outputs keys (image, image_2…)."""
+    if "image" not in outputs:
+        return None
+    urls = [outputs["image"]]
+    position = 2
+    while f"image_{position}" in outputs:
+        urls.append(outputs[f"image_{position}"])
+        position += 1
+    return urls
+
+
 def _status_for(job: Job, store: JobStore) -> StatusResponse:
     if job.state is JobState.QUEUED:
         return QueuedStatus(position=store.queued_position(job.id) or 1)
@@ -37,6 +49,7 @@ def _status_for(job: Job, store: JobStore) -> StatusResponse:
             video=job.outputs.get("video"),
             audio=job.outputs.get("audio"),
             image=job.outputs.get("image"),
+            images=_image_urls(job.outputs),
         )
     return FailedStatus(error=job.error or "Unknown error")
 

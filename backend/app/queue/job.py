@@ -52,6 +52,7 @@ class ImageParams:
     prompt: str
     orientation: str  # key of wan_pipeline.IMAGE_SIZES
     model: str = "wan-5b"  # engine id from models_catalog
+    count: int = 1  # variations per prompt (1-4), distinct seeds
 
 
 JobParams = TalkingHeadParams | BrollParams | ImageParams

@@ -25,7 +25,7 @@ export function stageLabel(stage: string): string {
 export type JobStatus =
   | { status: "queued"; position: number }
   | { status: "processing"; progress: number; stage: string; audio?: string }
-  | { status: "finished"; video?: string; audio?: string; image?: string }
+  | { status: "finished"; video?: string; audio?: string; image?: string; images?: string[] }
   | { status: "failed"; error: string };
 
 export interface JobSummary {

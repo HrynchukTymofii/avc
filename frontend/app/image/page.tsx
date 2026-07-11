@@ -24,10 +24,13 @@ const ORIENTATIONS = [
   { value: "square", label: "Square · 960×960" },
 ] as const;
 
+const COUNTS = ["1", "2", "3", "4"] as const;
+
 export default function ImagePage() {
   const [prompt, setPrompt] = useState("");
   const [orientation, setOrientation] = useState<string>("landscape");
   const [model, setModel] = useState("");
+  const [count, setCount] = useState<string>("1");
   const [jobId, setJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -49,7 +52,12 @@ export default function ImagePage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const response = await submitImage({ prompt, orientation, model: model || undefined });
+      const response = await submitImage({
+        prompt,
+        orientation,
+        model: model || undefined,
+        count: Number(count),
+      });
       setJobId(response.jobId);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Submission failed");
@@ -98,31 +106,54 @@ export default function ImagePage() {
             />
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-          <ModelSelect kind="image" value={model} onChange={setModel} disabled={busy} />
-          <div className="space-y-1.5">
-            <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-              Format
-            </label>
-            <Select
-              value={orientation}
-              onValueChange={(value) => {
-                if (value !== null) setOrientation(value);
-              }}
-              disabled={busy}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ORIENTATIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <div className="grid gap-5 sm:grid-cols-3">
+            <ModelSelect kind="image" value={model} onChange={setModel} disabled={busy} />
+            <div className="space-y-1.5">
+              <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                Format
+              </label>
+              <Select
+                value={orientation}
+                onValueChange={(value) => {
+                  if (value !== null) setOrientation(value);
+                }}
+                disabled={busy}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ORIENTATIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                Variations
+              </label>
+              <Select
+                value={count}
+                onValueChange={(value) => {
+                  if (value !== null) setCount(value);
+                }}
+                disabled={busy}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {COUNTS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option === "1" ? "1 image" : `${option} images`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {submitError && (
@@ -145,18 +176,25 @@ export default function ImagePage() {
           <JobProgress status={status} />
           {status?.status === "finished" && status.image && (
             <>
-              <div className="overflow-hidden rounded-lg border bg-black">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={status.image} alt="Generated image" className="w-full" />
-              </div>
-              <div className="flex gap-3">
-                <Button className="flex-1" render={<a href={status.image} download />}>
-                  Download PNG
-                </Button>
-                <Button variant="secondary" onClick={reset} className="flex-1">
-                  New image
-                </Button>
-              </div>
+              {(status.images ?? [status.image]).map((url, index) => (
+                <div key={url} className="overflow-hidden rounded-lg border bg-black">
+                  <a href={url} target="_blank" rel="noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt={`Generated image ${index + 1}`} className="w-full" />
+                  </a>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Variation {index + 1}
+                    </span>
+                    <Button size="sm" variant="secondary" render={<a href={url} download />}>
+                      Download
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button variant="secondary" onClick={reset} className="w-full">
+                New image
+              </Button>
             </>
           )}
           {!status && !busy && (

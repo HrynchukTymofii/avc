@@ -131,6 +131,7 @@ async def create_image(
     prompt: Annotated[str, Form()],
     orientation: Annotated[str, Form()] = "landscape",
     model: Annotated[str, Form()] = "wan-5b",
+    count: Annotated[int, Form(ge=1, le=4)] = 1,
 ) -> JobCreatedResponse:
     engine = _resolve_engine(JobKind.IMAGE, model, settings)
     prompt = validate_text(prompt, field="prompt", max_chars=settings.max_prompt_chars)
@@ -142,7 +143,9 @@ async def create_image(
     job = Job(
         id=new_job_id(),
         kind=JobKind.IMAGE,
-        params=ImageParams(prompt=prompt, orientation=orientation, model=engine.id),
+        params=ImageParams(
+            prompt=prompt, orientation=orientation, model=engine.id, count=count
+        ),
         label=_label(prompt),
     )
     await worker.submit(job)

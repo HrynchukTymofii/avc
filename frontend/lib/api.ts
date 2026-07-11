@@ -75,11 +75,13 @@ export async function submitImage(input: {
   prompt: string;
   orientation: string;
   model?: string;
+  count?: number;
 }): Promise<JobCreatedResponse> {
   const form = new FormData();
   form.append("prompt", input.prompt);
   form.append("orientation", input.orientation);
   if (input.model) form.append("model", input.model);
+  if (input.count && input.count > 1) form.append("count", String(input.count));
   return handle(await fetch("/api/image", { method: "POST", body: form }));
 }
 
