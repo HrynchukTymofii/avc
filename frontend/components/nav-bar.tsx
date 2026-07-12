@@ -29,8 +29,9 @@ const GROUPS: NavGroup[] = [
   {
     label: "Video",
     href: "/talking-head",
-    paths: ["/talking-head", "/broll"],
+    paths: ["/talking-head", "/broll", "/full-video"],
     items: [
+      { label: "Full video — tagged script assembler", href: "/full-video" },
       { label: "Talking head — lip-sync", href: "/talking-head?model=musetalk" },
       { label: "Talking head — animated", href: "/talking-head?model=musetalk-animate" },
       { label: "Talking head — full motion (S2V 14B)", href: "#", premium: true },

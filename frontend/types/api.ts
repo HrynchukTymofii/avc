@@ -1,6 +1,6 @@
 /** TypeScript mirrors of the backend's Pydantic schemas (backend/app/schemas.py). */
 
-export type JobKind = "talking_head" | "broll" | "image";
+export type JobKind = "talking_head" | "broll" | "image" | "full_video";
 
 export interface JobCreatedResponse {
   jobId: string;

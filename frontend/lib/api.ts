@@ -85,6 +85,24 @@ export async function submitImage(input: {
   return handle(await fetch("/api/image", { method: "POST", body: form }));
 }
 
+export async function submitFullVideo(input: {
+  script: string;
+  voice: string;
+  avatar: File | null;
+  orientation?: string;
+  clips?: File[];
+  model?: string;
+}): Promise<JobCreatedResponse> {
+  const form = new FormData();
+  form.append("script", input.script);
+  form.append("voice", input.voice);
+  if (input.avatar) form.append("avatar", input.avatar);
+  if (input.orientation) form.append("orientation", input.orientation);
+  for (const clip of input.clips ?? []) form.append("clips", clip);
+  if (input.model) form.append("model", input.model);
+  return handle(await fetch("/api/full-video", { method: "POST", body: form }));
+}
+
 export async function getStatus(jobId: string): Promise<JobStatus> {
   return handle(await fetch(`/api/status/${encodeURIComponent(jobId)}`));
 }
