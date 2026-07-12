@@ -19,6 +19,29 @@ class InputValidationError(ValueError):
     """Invalid user input; the message is safe to show to the end user."""
 
 
+def _size_limit_label(max_bytes: int) -> str:
+    if max_bytes >= 1024 * 1024:
+        return f"{max_bytes / (1024 * 1024):g} MB"
+    return f"{max_bytes} bytes"
+
+
+async def _read_capped(file: UploadFile, *, max_bytes: int, field: str) -> bytes:
+    """Stream an upload into memory, rejecting it as soon as it exceeds the cap."""
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await file.read(_READ_CHUNK_BYTES):
+        total += len(chunk)
+        if total > max_bytes:
+            raise InputValidationError(
+                f"{field} exceeds the {_size_limit_label(max_bytes)} size limit"
+            )
+        chunks.append(chunk)
+    data = b"".join(chunks)
+    if not data:
+        raise InputValidationError(f"{field} file is empty")
+    return data
+
+
 def validate_text(value: str, *, field: str, max_chars: int) -> str:
     cleaned = value.strip()
     if not cleaned:
@@ -39,21 +62,7 @@ async def read_image_upload(
 
     Returns the raw bytes and the canonical file extension (".png" / ".jpg").
     """
-    chunks: list[bytes] = []
-    total = 0
-    while chunk := await file.read(_READ_CHUNK_BYTES):
-        total += len(chunk)
-        if total > max_bytes:
-            if max_bytes >= 1024 * 1024:
-                limit = f"{max_bytes / (1024 * 1024):g} MB"
-            else:
-                limit = f"{max_bytes} bytes"
-            raise InputValidationError(f"{field} exceeds the {limit} size limit")
-        chunks.append(chunk)
-    data = b"".join(chunks)
-
-    if not data:
-        raise InputValidationError(f"{field} file is empty")
+    data = await _read_capped(file, max_bytes=max_bytes, field=field)
 
     try:
         with Image.open(io.BytesIO(data)) as image:
@@ -69,3 +78,24 @@ async def read_image_upload(
             f"{field} must be a PNG or JPEG image (got {image_format})"
         )
     return data, ALLOWED_IMAGE_FORMATS[image_format]
+
+
+async def read_video_upload(
+    file: UploadFile, *, max_bytes: int, field: str
+) -> tuple[bytes, str]:
+    """Read an uploaded video clip, enforcing the size limit while streaming and
+    sniffing the container by content — not filename. MP4/MOV (ISO BMFF, both
+    canonicalized to ".mp4") and WebM/Matroska (EBML) are accepted; whether the
+    file actually decodes is the caller's job (ffprobe it after saving).
+
+    Returns the raw bytes and the canonical file extension (".mp4" / ".webm").
+    """
+    data = await _read_capped(file, max_bytes=max_bytes, field=field)
+
+    # ISO BMFF (MP4/MOV): a leading box whose type at bytes 4-8 is "ftyp".
+    if len(data) > 12 and data[4:8] == b"ftyp":
+        return data, ".mp4"
+    # Matroska/WebM: EBML magic.
+    if data.startswith(b"\x1a\x45\xdf\xa3"):
+        return data, ".webm"
+    raise InputValidationError(f"{field} must be an MP4, MOV or WebM video file")

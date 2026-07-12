@@ -8,6 +8,7 @@ from PIL import Image
 from app.services.validation import (
     InputValidationError,
     read_image_upload,
+    read_video_upload,
     validate_text,
 )
 
@@ -99,3 +100,56 @@ async def test_renamed_extension_is_caught_by_content_sniffing() -> None:
     upload.filename = "innocent.png"  # type: ignore[attr-defined]
     with pytest.raises(InputValidationError, match="PNG or JPEG"):
         await read_image_upload(upload, max_bytes=10_000_000, field="avatar")
+
+
+# ---- read_video_upload ----------------------------------------------------------
+
+MP4_HEADER = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 32
+WEBM_HEADER = b"\x1a\x45\xdf\xa3" + b"\x00" * 32
+
+
+async def test_accepts_mp4_header() -> None:
+    data, ext = await read_video_upload(
+        FakeUpload(MP4_HEADER), max_bytes=10_000_000, field="clip"
+    )
+    assert ext == ".mp4"
+    assert data == MP4_HEADER
+
+
+async def test_mov_brand_is_canonicalized_to_mp4() -> None:
+    mov = b"\x00\x00\x00\x14ftypqt  " + b"\x00" * 32
+    _, ext = await read_video_upload(FakeUpload(mov), max_bytes=10_000_000, field="clip")
+    assert ext == ".mp4"
+
+
+async def test_accepts_webm_header() -> None:
+    _, ext = await read_video_upload(
+        FakeUpload(WEBM_HEADER), max_bytes=10_000_000, field="clip"
+    )
+    assert ext == ".webm"
+
+
+async def test_video_rejects_non_video_bytes() -> None:
+    with pytest.raises(InputValidationError, match="MP4, MOV or WebM"):
+        await read_video_upload(
+            FakeUpload(b"definitely not a video, but long enough"),
+            max_bytes=10_000_000,
+            field="clip",
+        )
+
+
+async def test_video_rejects_image_bytes() -> None:
+    with pytest.raises(InputValidationError, match="MP4, MOV or WebM"):
+        await read_video_upload(
+            FakeUpload(image_bytes("PNG")), max_bytes=10_000_000, field="clip"
+        )
+
+
+async def test_video_rejects_empty_file() -> None:
+    with pytest.raises(InputValidationError, match="file is empty"):
+        await read_video_upload(FakeUpload(b""), max_bytes=10_000_000, field="clip")
+
+
+async def test_video_rejects_oversized_upload() -> None:
+    with pytest.raises(InputValidationError, match="size limit"):
+        await read_video_upload(FakeUpload(MP4_HEADER), max_bytes=10, field="clip")

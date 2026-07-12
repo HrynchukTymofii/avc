@@ -14,6 +14,7 @@ class JobKind(str, Enum):
     TALKING_HEAD = "talking_head"
     BROLL = "broll"
     IMAGE = "image"
+    FULL_VIDEO = "full_video"
 
 
 class JobCreatedResponse(BaseModel):
@@ -41,6 +42,14 @@ class BrollRequest(BaseModel):
 
 class ImageRequest(BaseModel):
     prompt: str = Field(min_length=1)
+    orientation: Literal["landscape", "portrait", "square"] = "landscape"
+
+
+class FullVideoRequest(BaseModel):
+    # The script carries inline visual markers ([BROLL: …], [IMAGE: …],
+    # [CLIP: …], [ONCAMERA]) parsed by services.script_parser.
+    script: str = Field(min_length=1)
+    voice: str = Field(min_length=1)
     orientation: Literal["landscape", "portrait", "square"] = "landscape"
 
 

@@ -55,7 +55,19 @@ class ImageParams:
     count: int = 1  # variations per prompt (1-4), distinct seeds
 
 
-JobParams = TalkingHeadParams | BrollParams | ImageParams
+@dataclass
+class FullVideoParams:
+    script: str  # tagged script (services.script_parser grammar)
+    voice_id: str
+    # avatar_path is None only when the script has no on-camera segments.
+    avatar_path: Path | None
+    orientation: str = "landscape"  # key of wan_pipeline.IMAGE_SIZES
+    # casefolded [CLIP: …] name -> uploaded file saved under inputs/.
+    clip_paths: dict[str, Path] = field(default_factory=dict)
+    model: str = "full-video"  # engine id from models_catalog
+
+
+JobParams = TalkingHeadParams | BrollParams | ImageParams | FullVideoParams
 
 
 def new_job_id() -> str:

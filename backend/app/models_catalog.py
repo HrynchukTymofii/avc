@@ -55,6 +55,14 @@ CATALOG: tuple[Engine, ...] = (
         "wan-animate-14b", "Character video (Wan2.2-Animate-14B)", JobKind.BROLL,
         "premium", "40 / clip", "wan-animate", implemented=False,
     ),
+    # ---- full video ----------------------------------------------------------------
+    # One engine: the assembler always narrates with S2, lip-syncs with MuseTalk
+    # and generates b-roll/stills on the Wan pipeline (stills deliberately skip
+    # FLUX — rendering them inside the same Wan residency avoids a ~34 GB swap).
+    Engine(
+        "full-video", "Full video (tagged script)", JobKind.FULL_VIDEO,
+        "standard", "varies / script", "wan", default=True,
+    ),
     # ---- image -------------------------------------------------------------------
     Engine(
         "wan-5b", "Wan2.2 5B (single frame)", JobKind.IMAGE,

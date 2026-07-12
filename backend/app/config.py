@@ -28,9 +28,14 @@ class Settings(BaseSettings):
     assets_dir: Path = BACKEND_DIR / "assets"
 
     max_upload_mb: int = 20
+    # Uploaded [CLIP: …] footage for full-video jobs can legitimately be large.
+    max_clip_upload_mb: int = 200
     # ~20 minutes of spoken English at a natural pace (~900 chars/minute).
     max_script_chars: int = 20_000
     max_prompt_chars: int = 1_000
+    # 12 all-b-roll segments is ~90-100 min of diffusion on the L40S — still
+    # inside job_timeout_s with margin.
+    full_video_max_segments: int = 12
 
     # Talking head runs at roughly 1-3 minutes of processing per minute of script,
     # so a 20-minute script can legitimately take over an hour.
@@ -62,6 +67,10 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def max_clip_upload_bytes(self) -> int:
+        return self.max_clip_upload_mb * 1024 * 1024
 
     @property
     def voices_dir(self) -> Path:
