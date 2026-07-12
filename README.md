@@ -1,6 +1,6 @@
 # AI Video Studio
 
-A self-hosted web app with two GPU generation tools sharing one backend, one
+A self-hosted web app with GPU generation tools sharing one backend, one
 queue, and one GPU:
 
 - **Talking Head Studio** — upload a portrait, pick a voice, paste a script →
@@ -8,6 +8,9 @@ queue, and one GPU:
   **MuseTalk** lip-sync).
 - **B-Roll Generator** — describe a shot (optionally from a reference image) →
   3–5 second clip (**Wan2.2 TI2V-5B**), encoded for Premiere Pro.
+- **Full Video Studio** — one tagged script → one finished video: talking head
+  on camera, AI b-roll, AI stills (slow zoom) and your own uploaded clips, cut
+  together over a continuous voiceover.
 
 Architecture details live in [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -50,6 +53,60 @@ arrive pre-tagged:
 > change; prefer pauses and emphasis over strong emotions unless the content
 > calls for them; never put a tag mid-word; output plain text only.
 
+## Full Video: tagged scripts
+
+Full Video Studio reads the same script format and adds **visual markers** that
+direct the cut. The rule that keeps them apart from voice tags: **visual
+markers contain a colon** (or are exactly `[ONCAMERA]`); anything else in
+square brackets is a voice tag and gets spoken direction as usual.
+
+| Marker | Effect |
+|---|---|
+| plain text | spoken on camera by your avatar (talking head) |
+| `[BROLL: <prompt>]` | following text is voiced over an AI-generated clip (Wan2.2) |
+| `[IMAGE: <prompt>]` | following text is voiced over an AI still with a slow Ken Burns zoom |
+| `[CLIP: <filename>]` | following text is voiced over a clip you uploaded with the job (muted, trimmed/looped to fit) |
+| `[ONCAMERA]` | return to the talking head |
+
+A marker's segment lasts until the next marker. Keywords are case-insensitive
+(`[b-roll: …]` and `[ON CAMERA]` also work). Segment videos are fitted to the
+narration length automatically: short b-roll is ping-pong-looped, stills zoom
+for exactly the narration duration, long clips are trimmed.
+
+Example:
+
+```
+[professional broadcast tone] Welcome back to the channel.
+
+[BROLL: aerial drone shot of a solar farm at sunset, golden light]
+Across the world, solar capacity has tripled in a decade. [short pause]
+
+[IMAGE: clean minimalist diagram of a photovoltaic cell]
+Each cell converts photons into electron flow.
+
+[CLIP: lab-tour.mp4]
+Here is how we test the panels in our own lab.
+
+[ONCAMERA]
+[emphasis] And that is why the next ten years matter.
+```
+
+### Prompt block for LLM full-video scripts
+
+Paste this into Claude/ChatGPT together with your topic:
+
+> Write a voiceover script for [TOPIC], about [N] minutes when spoken, for a
+> video that mixes an on-camera presenter with cutaway footage. Direct the
+> visuals with markers on their own lines: `[BROLL: <detailed scene prompt>]`
+> to cut to AI-generated footage, `[IMAGE: <detailed image prompt>]` for an AI
+> still with a slow zoom, and `[ONCAMERA]` to return to the presenter. Plain
+> text is spoken on camera. Open and close on camera; cut away every 2–4
+> sentences; write b-roll/image prompts as rich visual descriptions (subject,
+> setting, lighting, camera angle), never as narration. Keep using expressive
+> voice tags like [short pause], [emphasis], [excited] inside the narration —
+> but never put a colon inside a voice tag, colons are reserved for visual
+> markers. Output plain text only.
+
 ## Honest speed expectations
 
 On the target g6e.2xlarge (NVIDIA L40S, 48 GB VRAM, 64 GB RAM):
@@ -59,6 +116,7 @@ On the target g6e.2xlarge (NVIDIA L40S, 48 GB VRAM, 64 GB RAM):
 | Talking head | ≈ 1–3 minutes of processing **per minute of script** |
 | B-roll clip (5 s, 704×1280) | ≈ 3–8 minutes per clip |
 | Still image (Wan single-frame) | ≈ 1 minute once the model is warm |
+| Full video | roughly the sum of its parts: 1–3 min per on-camera minute + 3–8 min per b-roll segment + ~1 min per still |
 | First job after a restart | + 1–2 minutes (models load lazily on first use) |
 
 Queue a batch and collect results from the "Recent generations" grid — jobs
