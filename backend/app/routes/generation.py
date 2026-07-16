@@ -11,6 +11,7 @@ from app.config import Settings
 from app.deps import get_loras, get_settings_dep, get_worker
 from app.models_catalog import Engine, get_engine, is_available
 from app.pipelines.wan_pipeline import IMAGE_SIZES
+from app.pipelines.upscale_pipeline import OUTPUT_SCALES
 from app.queue.job import (
     BrollParams,
     FullVideoParams,
@@ -18,6 +19,7 @@ from app.queue.job import (
     Job,
     LoraTrainingParams,
     TalkingHeadParams,
+    UpscaleParams,
     new_job_id,
 )
 from app.queue.worker import GPUWorker
@@ -29,6 +31,7 @@ from app.services.script_parser import SegmentKind, parse_full_video_script
 from app.services.validation import (
     InputValidationError,
     read_image_upload,
+    read_media_upload,
     read_video_upload,
     validate_text,
 )
@@ -318,6 +321,73 @@ async def create_full_video(
             model=engine.id,
         ),
         label=_label(script),
+    )
+    await worker.submit(job)
+    return JobCreatedResponse(job_id=job_id)
+
+
+@router.post("/upscale", response_model=JobCreatedResponse, responses=_RESPONSES)
+async def create_upscale(
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+    worker: Annotated[GPUWorker, Depends(get_worker)],
+    file: Annotated[UploadFile, File()],
+    model: Annotated[str, Form()] = "realesrgan-photo",
+    scale: Annotated[int, Form()] = 4,
+) -> JobCreatedResponse:
+    engine = _resolve_engine(JobKind.UPSCALE, model, settings)
+    if scale not in OUTPUT_SCALES:
+        raise InputValidationError(
+            f"scale must be one of {', '.join(str(s) for s in OUTPUT_SCALES)}"
+        )
+
+    data, extension, media = await read_media_upload(
+        file,
+        max_image_bytes=settings.max_upload_bytes,
+        max_video_bytes=settings.max_clip_upload_bytes,
+        field="file",
+    )
+
+    if media == "image":
+        import io
+
+        from PIL import Image
+
+        with Image.open(io.BytesIO(data)) as image:
+            megapixels = (image.width * image.height) / 1_000_000
+        if megapixels > settings.upscale_max_image_mp:
+            raise InputValidationError(
+                f"image is {megapixels:.1f} MP — the maximum is "
+                f"{settings.upscale_max_image_mp:g} MP (it would be huge after 4x)"
+            )
+
+    job_id = new_job_id()
+    media_path = settings.outputs_dir / job_id / "inputs" / f"source{extension}"
+    media_path.parent.mkdir(parents=True, exist_ok=True)
+    media_path.write_bytes(data)
+
+    if media == "video":
+        try:
+            duration = await ffmpeg.probe_duration(media_path)
+        except ffmpeg.FFmpegError as exc:
+            raise InputValidationError("file is not a playable video") from exc
+        if duration > settings.upscale_max_video_s:
+            raise InputValidationError(
+                f"video is {duration:.0f} s — the maximum is "
+                f"{settings.upscale_max_video_s:.0f} s"
+            )
+
+    filename = Path(file.filename or "").name or f"{media} upload"
+    job = Job(
+        id=job_id,
+        kind=JobKind.UPSCALE,
+        params=UpscaleParams(
+            media_path=media_path,
+            media=media,
+            variant="anime" if engine.id == "realesrgan-anime" else "photo",
+            scale=scale,
+            model=engine.id,
+        ),
+        label=_label(f"{filename} · {scale}x"),
     )
     await worker.submit(job)
     return JobCreatedResponse(job_id=job_id)

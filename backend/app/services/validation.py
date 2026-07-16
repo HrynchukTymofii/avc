@@ -80,6 +80,42 @@ async def read_image_upload(
     return data, ALLOWED_IMAGE_FORMATS[image_format]
 
 
+async def read_media_upload(
+    file: UploadFile, *, max_image_bytes: int, max_video_bytes: int, field: str
+) -> tuple[bytes, str, str]:
+    """Read an upload that may be either an image or a video, detected by
+    content. Returns (bytes, canonical extension, kind) with kind "image" or
+    "video". Images get the (smaller) image size cap, videos the video cap.
+    """
+    data = await _read_capped(file, max_bytes=max(max_image_bytes, max_video_bytes), field=field)
+
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            image.verify()
+            image_format = image.format
+    except Exception:
+        image_format = None
+
+    if image_format is not None:
+        if image_format not in ALLOWED_IMAGE_FORMATS:
+            raise InputValidationError(
+                f"{field} must be a PNG or JPEG image (got {image_format})"
+            )
+        if len(data) > max_image_bytes:
+            raise InputValidationError(
+                f"{field} exceeds the {_size_limit_label(max_image_bytes)} image size limit"
+            )
+        return data, ALLOWED_IMAGE_FORMATS[image_format], "image"
+
+    if len(data) > 12 and data[4:8] == b"ftyp":
+        return data, ".mp4", "video"
+    if data.startswith(b"\x1a\x45\xdf\xa3"):
+        return data, ".webm", "video"
+    raise InputValidationError(
+        f"{field} must be a PNG/JPEG image or an MP4, MOV or WebM video"
+    )
+
+
 async def read_video_upload(
     file: UploadFile, *, max_bytes: int, field: str
 ) -> tuple[bytes, str]:

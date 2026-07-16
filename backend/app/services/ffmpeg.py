@@ -115,6 +115,56 @@ async def probe_duration(src: Path) -> float:
         raise FFmpegError(f"could not read duration of {src.name}: {out.strip()!r}") from exc
 
 
+async def probe_fps(src: Path) -> float:
+    """Video frame rate (r_frame_rate of the first video stream, e.g. 30000/1001)."""
+    out = await _run_ffprobe(
+        "-select_streams", "v:0",
+        "-show_entries", "stream=r_frame_rate",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(src),
+    )
+    raw = out.strip()
+    try:
+        if "/" in raw:
+            numerator, denominator = raw.split("/", 1)
+            fps = float(numerator) / float(denominator)
+        else:
+            fps = float(raw)
+    except (ValueError, ZeroDivisionError) as exc:
+        raise FFmpegError(f"could not read frame rate of {src.name}: {raw!r}") from exc
+    if fps <= 0:
+        raise FFmpegError(f"{src.name} has no measurable frame rate")
+    return fps
+
+
+async def extract_frames(src: Path, frames_dir: Path) -> list[Path]:
+    """Decode every frame to a numbered PNG (lossless intermediate for
+    per-frame processing). Returns the frame paths in order."""
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    await _run("-i", str(src), str(frames_dir / "frame_%06d.png"))
+    frames = sorted(frames_dir.glob("frame_*.png"))
+    if not frames:
+        raise FFmpegError(f"no frames decoded from {src.name}")
+    return frames
+
+
+async def frames_to_video(
+    frames_dir: Path, dst: Path, *, fps: float, audio_src: Path | None = None
+) -> Path:
+    """Assemble numbered PNGs back into an H.264 MP4 at the given fps, carrying
+    the audio track over from `audio_src` when it has one (`-map 1:a?` keeps
+    silent sources working)."""
+    args = ["-framerate", f"{fps:.6f}", "-i", str(frames_dir / "frame_%06d.png")]
+    if audio_src is not None:
+        args += ["-i", str(audio_src), "-map", "0:v", "-map", "1:a?"]
+    args += ["-vf", _EVEN_DIMS_FILTER, *_H264_ARGS]
+    if audio_src is not None:
+        args += ["-c:a", "aac", "-b:a", "192k", "-shortest"]
+    args.append(str(dst))
+    await _run(*args)
+    return dst
+
+
 async def still_to_clip(
     src: Path,
     dst: Path,

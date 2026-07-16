@@ -16,6 +16,7 @@ class JobKind(str, Enum):
     IMAGE = "image"
     FULL_VIDEO = "full_video"
     LORA_TRAINING = "lora_training"
+    UPSCALE = "upscale"
 
 
 class JobCreatedResponse(BaseModel):

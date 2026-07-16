@@ -63,6 +63,17 @@ CATALOG: tuple[Engine, ...] = (
         "full-video", "Full video (tagged script)", JobKind.FULL_VIDEO,
         "standard", "varies / script", "wan", default=True,
     ),
+    # ---- upscale -------------------------------------------------------------------
+    # Same pipeline, two Real-ESRGAN variants; both handle images and videos
+    # (videos are upscaled frame by frame, so they cost far more GPU-seconds).
+    Engine(
+        "realesrgan-photo", "Photo / general (Real-ESRGAN x4)", JobKind.UPSCALE,
+        "standard", "1 / image · 10 / video", "upscale", default=True,
+    ),
+    Engine(
+        "realesrgan-anime", "Drawn / anime (Real-ESRGAN x4)", JobKind.UPSCALE,
+        "standard", "1 / image · 10 / video", "upscale",
+    ),
     # ---- style LoRA training -------------------------------------------------------
     # Trains on the Wan2.2 5B base via ostris/ai-toolkit in a subprocess; the
     # processor frees the whole GPU instead of acquiring a managed pipeline, so

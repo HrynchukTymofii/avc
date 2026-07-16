@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     job_timeout_s: float = 7_200.0
     recent_jobs_limit: int = 20
 
+    # ---- upscaling (Real-ESRGAN) --------------------------------------------------
+    # Inputs are upscaled 4x natively; caps keep output sizes and per-frame
+    # video runtimes sane on the L40S.
+    upscale_max_image_mp: float = 4.0  # input megapixels (4 MP -> 64 MP at 4x)
+    upscale_max_video_s: float = 120.0
+
     # ---- style LoRA training (ostris/ai-toolkit on the Wan2.2 5B base) ----------
     lora_min_images: int = 5
     lora_max_images: int = 60
@@ -62,6 +68,8 @@ class Settings(BaseSettings):
     s2_offload: OffloadPolicy = "unload"
     musetalk_offload: OffloadPolicy = "cpu"
     wan_offload: OffloadPolicy = "cpu"
+    # Real-ESRGAN is ~100 MB total — parking it in RAM is free.
+    upscale_offload: OffloadPolicy = "cpu"
     # FLUX is ~34 GB in bf16 — parking it in CPU RAM next to Wan would blow the
     # 64 GB host, so it drops to disk when evicted (page cache keeps reloads fast).
     flux_offload: OffloadPolicy = "unload"

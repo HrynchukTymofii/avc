@@ -76,6 +76,15 @@ class FullVideoParams:
 
 
 @dataclass
+class UpscaleParams:
+    media_path: Path
+    media: str  # "image" | "video"
+    variant: str  # upscale_pipeline.VARIANTS key ("photo" | "anime")
+    scale: int  # 2 | 4
+    model: str = "realesrgan-photo"  # engine id from models_catalog
+
+
+@dataclass
 class LoraTrainingParams:
     # Style/character LoRA training on the Wan2.2 5B base (ostris/ai-toolkit).
     name: str  # display name for the finished style
@@ -88,7 +97,12 @@ class LoraTrainingParams:
 
 
 JobParams = (
-    TalkingHeadParams | BrollParams | ImageParams | FullVideoParams | LoraTrainingParams
+    TalkingHeadParams
+    | BrollParams
+    | ImageParams
+    | FullVideoParams
+    | LoraTrainingParams
+    | UpscaleParams
 )
 
 

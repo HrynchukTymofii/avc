@@ -14,6 +14,7 @@ from app.pipelines.flux_pipeline import FluxPipeline
 from app.pipelines.manager import ModelManager
 from app.pipelines.musetalk_pipeline import MuseTalkPipeline
 from app.pipelines.s2_pipeline import S2Pipeline
+from app.pipelines.upscale_pipeline import UpscalePipeline
 from app.pipelines.wan_a14b_pipeline import WanA14BPipeline
 from app.pipelines.wan_pipeline import WanPipeline
 from app.queue.job_store import JobStore
@@ -30,6 +31,7 @@ from app.services.image import ImageProcessor
 from app.services.lora_training import LoraTrainingProcessor
 from app.services.loras import LoraRegistry
 from app.services.talking_head import TalkingHeadProcessor
+from app.services.upscale import UpscaleProcessor
 from app.services.validation import InputValidationError
 from app.services.voices import VoiceRegistry
 
@@ -49,6 +51,10 @@ def build_model_manager(settings: Settings) -> ModelManager:
         FluxPipeline(
             settings.models_dir / "flux.1-schnell",
             offload_policy=settings.flux_offload,
+        ),
+        UpscalePipeline(
+            settings.models_dir / "realesrgan",
+            offload_policy=settings.upscale_offload,
         ),
     ]
     if settings.premium_enabled:
@@ -71,6 +77,7 @@ def build_processors(
         JobKind.IMAGE: ImageProcessor(manager, settings),
         JobKind.FULL_VIDEO: FullVideoProcessor(manager, voices, settings),
         JobKind.LORA_TRAINING: LoraTrainingProcessor(manager, loras, settings),
+        JobKind.UPSCALE: UpscaleProcessor(manager, settings),
     }
 
 
