@@ -122,6 +122,9 @@ class Job:
     # entries and are never reprocessed.
     params: JobParams | None
     label: str = ""
+    # Owner (AuthUser.id). "local" = the implicit user when auth is disabled,
+    # and the owner of jobs created before accounts existed.
+    user_id: str = "local"
     state: JobState = JobState.QUEUED
     progress: int = 0
     stage: str | None = None

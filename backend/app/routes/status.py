@@ -8,6 +8,7 @@ from app.deps import get_settings_dep, get_store
 from app.config import Settings
 from app.queue.job import Job, JobState
 from app.queue.job_store import JobStore
+from app.services.auth import AuthUser, can_view, get_current_user
 from app.schemas import (
     ErrorResponse,
     FailedStatus,
@@ -64,9 +65,11 @@ def _status_for(job: Job, store: JobStore) -> StatusResponse:
 async def get_status(
     job_id: str,
     store: Annotated[JobStore, Depends(get_store)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> StatusResponse:
     job = store.get(job_id)
-    if job is None:
+    # Someone else's job reads as absent, not forbidden — don't leak existence.
+    if job is None or not can_view(user, job.user_id):
         raise HTTPException(status_code=404, detail="Job not found")
     return _status_for(job, store)
 
@@ -75,10 +78,16 @@ async def get_status(
 async def list_jobs(
     store: Annotated[JobStore, Depends(get_store)],
     settings: Annotated[Settings, Depends(get_settings_dep)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
     kind: Annotated[JobKind | None, Query()] = None,
     limit: Annotated[int | None, Query(ge=1, le=100)] = None,
 ) -> JobListResponse:
-    jobs = store.list_recent(limit=limit or settings.recent_jobs_limit, kind=kind)
+    jobs = store.list_recent(
+        limit=limit or settings.recent_jobs_limit,
+        kind=kind,
+        # Admins see the whole queue; everyone else sees their own history.
+        user_id=None if user.role == "admin" else user.id,
+    )
     return JobListResponse(
         jobs=[
             JobSummary(

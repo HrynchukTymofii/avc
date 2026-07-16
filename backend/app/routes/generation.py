@@ -26,6 +26,7 @@ from app.queue.worker import GPUWorker
 from app.routes.voices import get_voices
 from app.schemas import ErrorResponse, JobCreatedResponse, JobKind
 from app.services import ffmpeg
+from app.services.auth import AuthUser, get_current_user, require_approved
 from app.services.loras import TRIGGER_RE, LoraRegistry, LoraStyleInfo
 from app.services.script_parser import SegmentKind, parse_full_video_script
 from app.services.validation import (
@@ -95,12 +96,14 @@ async def create_talking_head(
     settings: Annotated[Settings, Depends(get_settings_dep)],
     worker: Annotated[GPUWorker, Depends(get_worker)],
     voices: Annotated[VoiceRegistry, Depends(get_voices)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
     script: Annotated[str, Form()],
     voice: Annotated[str, Form()],
     avatar: Annotated[UploadFile | None, File()] = None,
     voice_only: Annotated[bool, Form()] = False,
     model: Annotated[str, Form()] = "musetalk",
 ) -> JobCreatedResponse:
+    require_approved(user)
     engine = _resolve_engine(JobKind.TALKING_HEAD, model, settings)
     script = validate_text(script, field="script", max_chars=settings.max_script_chars)
     if voices.get(voice) is None:
@@ -134,6 +137,7 @@ async def create_talking_head(
             model=engine.id,
         ),
         label=_label(script),
+        user_id=user.id,
     )
     await worker.submit(job)
     return JobCreatedResponse(job_id=job_id)
@@ -144,6 +148,7 @@ async def create_broll(
     settings: Annotated[Settings, Depends(get_settings_dep)],
     worker: Annotated[GPUWorker, Depends(get_worker)],
     loras: Annotated[LoraRegistry, Depends(get_loras)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
     prompt: Annotated[str, Form()],
     duration: Annotated[int, Form(ge=3, le=5)],
     image: Annotated[UploadFile | None, File()] = None,
@@ -151,6 +156,7 @@ async def create_broll(
     lora: Annotated[str, Form()] = "",
     lora_scale: Annotated[float, Form(ge=0.1, le=2.0)] = 1.0,
 ) -> JobCreatedResponse:
+    require_approved(user)
     engine = _resolve_engine(JobKind.BROLL, model, settings)
     prompt = validate_text(prompt, field="prompt", max_chars=settings.max_prompt_chars)
     style = _resolve_lora(lora, engine, loras)
@@ -179,6 +185,7 @@ async def create_broll(
             lora_scale=lora_scale,
         ),
         label=_label(prompt),
+        user_id=user.id,
     )
     await worker.submit(job)
     return JobCreatedResponse(job_id=job_id)
@@ -189,6 +196,7 @@ async def create_image(
     settings: Annotated[Settings, Depends(get_settings_dep)],
     worker: Annotated[GPUWorker, Depends(get_worker)],
     loras: Annotated[LoraRegistry, Depends(get_loras)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
     prompt: Annotated[str, Form()],
     orientation: Annotated[str, Form()] = "landscape",
     model: Annotated[str, Form()] = "wan-5b",
@@ -196,6 +204,7 @@ async def create_image(
     lora: Annotated[str, Form()] = "",
     lora_scale: Annotated[float, Form(ge=0.1, le=2.0)] = 1.0,
 ) -> JobCreatedResponse:
+    require_approved(user)
     engine = _resolve_engine(JobKind.IMAGE, model, settings)
     prompt = validate_text(prompt, field="prompt", max_chars=settings.max_prompt_chars)
     style = _resolve_lora(lora, engine, loras)
@@ -218,6 +227,7 @@ async def create_image(
             lora_scale=lora_scale,
         ),
         label=_label(prompt),
+        user_id=user.id,
     )
     await worker.submit(job)
     return JobCreatedResponse(job_id=job.id)
@@ -228,6 +238,7 @@ async def create_full_video(
     settings: Annotated[Settings, Depends(get_settings_dep)],
     worker: Annotated[GPUWorker, Depends(get_worker)],
     voices: Annotated[VoiceRegistry, Depends(get_voices)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
     script: Annotated[str, Form()],
     voice: Annotated[str, Form()],
     avatar: Annotated[UploadFile | None, File()] = None,
@@ -235,6 +246,7 @@ async def create_full_video(
     clips: Annotated[list[UploadFile] | None, File()] = None,
     model: Annotated[str, Form()] = "full-video",
 ) -> JobCreatedResponse:
+    require_approved(user)
     engine = _resolve_engine(JobKind.FULL_VIDEO, model, settings)
     script = validate_text(script, field="script", max_chars=settings.max_script_chars)
     if orientation not in IMAGE_SIZES:
@@ -321,6 +333,7 @@ async def create_full_video(
             model=engine.id,
         ),
         label=_label(script),
+        user_id=user.id,
     )
     await worker.submit(job)
     return JobCreatedResponse(job_id=job_id)
@@ -330,10 +343,12 @@ async def create_full_video(
 async def create_upscale(
     settings: Annotated[Settings, Depends(get_settings_dep)],
     worker: Annotated[GPUWorker, Depends(get_worker)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
     file: Annotated[UploadFile, File()],
     model: Annotated[str, Form()] = "realesrgan-photo",
     scale: Annotated[int, Form()] = 4,
 ) -> JobCreatedResponse:
+    require_approved(user)
     engine = _resolve_engine(JobKind.UPSCALE, model, settings)
     if scale not in OUTPUT_SCALES:
         raise InputValidationError(
@@ -388,6 +403,7 @@ async def create_upscale(
             model=engine.id,
         ),
         label=_label(f"{filename} · {scale}x"),
+        user_id=user.id,
     )
     await worker.submit(job)
     return JobCreatedResponse(job_id=job_id)
@@ -397,6 +413,7 @@ async def create_upscale(
 async def create_lora_training(
     settings: Annotated[Settings, Depends(get_settings_dep)],
     worker: Annotated[GPUWorker, Depends(get_worker)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
     name: Annotated[str, Form()],
     trigger: Annotated[str, Form()],
     images: Annotated[list[UploadFile], File()],
@@ -404,6 +421,7 @@ async def create_lora_training(
     steps: Annotated[int, Form(ge=0)] = 0,
     model: Annotated[str, Form()] = "wan22-5b-lora",
 ) -> JobCreatedResponse:
+    require_approved(user)
     _resolve_engine(JobKind.LORA_TRAINING, model, settings)
     name = validate_text(name, field="name", max_chars=60)
     trigger = trigger.strip()
@@ -459,6 +477,7 @@ async def create_lora_training(
             steps=steps,
         ),
         label=f"{name} · {len(uploads)} images",
+        user_id=user.id,
     )
     await worker.submit(job)
     return JobCreatedResponse(job_id=job_id)

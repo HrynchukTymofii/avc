@@ -23,6 +23,14 @@ class Settings(BaseSettings):
 
     backend_port: int = 8000
 
+    # ---- auth --------------------------------------------------------------------
+    # false = single implicit local user (dev, tests, basic-auth-only deploys).
+    # true = every /api request needs a Bearer token minted by the Next.js
+    # frontend from the NextAuth session, signed with api_jwt_secret (set the
+    # same value as the frontend's API_JWT_SECRET).
+    auth_enabled: bool = False
+    api_jwt_secret: str = ""
+
     models_dir: Path = BACKEND_DIR / "models"
     outputs_dir: Path = BACKEND_DIR / "outputs"
     assets_dir: Path = BACKEND_DIR / "assets"

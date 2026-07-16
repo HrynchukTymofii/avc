@@ -40,10 +40,17 @@ class JobStore:
     def get(self, job_id: str) -> Job | None:
         return self._jobs.get(job_id)
 
-    def list_recent(self, limit: int = 20, kind: JobKind | None = None) -> list[Job]:
+    def list_recent(
+        self,
+        limit: int = 20,
+        kind: JobKind | None = None,
+        user_id: str | None = None,
+    ) -> list[Job]:
         jobs = self._jobs.values()
         if kind is not None:
             jobs = (j for j in jobs if j.kind is kind)
+        if user_id is not None:
+            jobs = (j for j in jobs if j.user_id == user_id)
         return sorted(jobs, key=lambda j: j.created_at, reverse=True)[:limit]
 
     def queued_position(self, job_id: str) -> int | None:
@@ -112,6 +119,7 @@ def _snapshot_from_job(job: Job) -> dict[str, Any]:
         "kind": job.kind.value,
         "state": job.state.value,
         "label": job.label,
+        "user_id": job.user_id,
         "progress": job.progress,
         "stage": job.stage,
         "error": job.error,
@@ -134,6 +142,7 @@ def _job_from_snapshot(data: dict[str, Any]) -> Job:
         kind=JobKind(data["kind"]),
         params=None,
         label=str(data.get("label", "")),
+        user_id=str(data.get("user_id", "local")),
         state=JobState(data["state"]),
         progress=int(data.get("progress", 0)),
         stage=data.get("stage"),

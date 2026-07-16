@@ -8,6 +8,7 @@ from app.config import Settings
 from app.deps import get_settings_dep
 from app.models_catalog import engines_for, is_available
 from app.schemas import EngineInfo, JobKind, ModelsResponse
+from app.services.auth import AuthUser, get_current_user
 
 router = APIRouter(prefix="/api", tags=["models"])
 
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/api", tags=["models"])
 @router.get("/models", response_model=ModelsResponse)
 async def list_models(
     settings: Annotated[Settings, Depends(get_settings_dep)],
+    _user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> ModelsResponse:
     return ModelsResponse(
         models={
