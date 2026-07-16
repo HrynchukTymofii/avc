@@ -90,6 +90,17 @@ COPY requirements.txt requirements-gpu.txt ./
 # with MuseTalk's older pins (see README troubleshooting).
 RUN python3.11 -m pip install -r requirements-gpu.txt
 
+# Real-ESRGAN upscaler. realesrgan only needs basicsr at runtime (its gfpgan/
+# facexlib deps serve the CLI face-enhance path) — --no-deps keeps those out.
+# basicsr 1.4.2 imports a torchvision API removed in 0.17; patch the import,
+# then canary-import so a break fails the build instead of the first job.
+RUN python3.11 -m pip install "basicsr==1.4.2" \
+    && python3.11 -m pip install --no-deps "realesrgan==0.3.0" \
+    && sed -i 's/from torchvision.transforms.functional_tensor import rgb_to_grayscale/from torchvision.transforms.functional import rgb_to_grayscale/' \
+        /usr/local/lib/python3.11/dist-packages/basicsr/data/degradations.py \
+    && python3.11 -c "from realesrgan import RealESRGANer; \
+from basicsr.archs.rrdbnet_arch import RRDBNet; print('realesrgan: ok')"
+
 # fish-speech drags in a FlashAttention-3 build that (a) targets Hopper GPUs,
 # not the L40S, and (b) crashes diffusers' import-time custom-op registration
 # on torch 2.4. Nothing in this stack uses it — remove whatever provides it.

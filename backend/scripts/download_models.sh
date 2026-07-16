@@ -59,6 +59,25 @@ download Wan-AI/Wan2.2-TI2V-5B-Diffusers "$MODELS_DIR/wan2.2-ti2v-5b"
 # --- FLUX.1-schnell, image generation (~34 GB, Apache 2.0) ---------------------------
 download black-forest-labs/FLUX.1-schnell "$MODELS_DIR/flux.1-schnell"
 
+# --- Real-ESRGAN upscaler weights (~80 MB, GitHub releases — not on HF) --------------
+RESRGAN_DIR="$MODELS_DIR/realesrgan"
+mkdir -p "$RESRGAN_DIR"
+fetch_release() {
+    local url="$1" dest="$2"
+    if [ -s "$dest" ]; then
+        echo "==> $(basename "$dest") already present, skipping"
+        return
+    fi
+    echo "==> $url"
+    curl -fL --retry 3 -o "$dest" "$url"
+}
+fetch_release \
+    https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth \
+    "$RESRGAN_DIR/RealESRGAN_x4plus.pth"
+fetch_release \
+    https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth \
+    "$RESRGAN_DIR/RealESRGAN_x4plus_anime_6B.pth"
+
 # --- Premium tier (H100 only; skipped unless PREMIUM_ENABLED=true) -------------------
 # ~110 GB extra. Do NOT download on the L40S instance — these models don't fit
 # its GPU and only waste disk. See SERVICE_ARCHITECTURE.md section 2.
