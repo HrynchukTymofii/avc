@@ -405,6 +405,63 @@ ssh -L 3000:localhost:3000 ubuntu@<elastic-ip>
 
 ---
 
+### 2.9 Accounts (optional): NextAuth + Neon
+
+With `AUTH_ENABLED=false` (default) the studio is single-user behind nginx
+basic auth, as before. To turn on real accounts (email/password + Google,
+per-user job history, admin approval gate):
+
+1. **Neon database** — create a project at neon.tech, copy the connection
+   string (keep `?sslmode=require`).
+2. **Create the tables** — from any machine with the repo (your PC is fine):
+
+   ```bash
+   cd frontend
+   DATABASE_URL="postgres://...neon.tech/...?sslmode=require" npx prisma db push
+   ```
+
+   (PowerShell: `$env:DATABASE_URL="..."; npx prisma db push`)
+3. **Google OAuth** — Google Cloud console → APIs & Services → Credentials →
+   Create credentials → OAuth client ID → Web application. Authorized redirect
+   URI: `https://studio.fibipals.com/api/auth/callback/google`. Copy the
+   client ID and secret. (Skip this to run email/password only — the Google
+   button will just error until configured.)
+4. **Secrets + .env on the instance** — SSH in and edit the repo `.env`
+   (`nano ~/ai-video-studio/.env`):
+
+   ```bash
+   AUTH_ENABLED=true
+   API_JWT_SECRET=<openssl rand -hex 32>
+   NEXTAUTH_SECRET=<openssl rand -hex 32, different value>
+   NEXTAUTH_URL=https://studio.fibipals.com
+   DATABASE_URL=postgres://...neon.tech/...?sslmode=require
+   GOOGLE_CLIENT_ID=...
+   GOOGLE_CLIENT_SECRET=...
+   ```
+
+5. **Rebuild + restart** — auth on/off is baked into the frontend image:
+
+   ```bash
+   cd ~/ai-video-studio
+   docker compose build frontend && docker compose up -d
+   ```
+
+6. **Approve yourself** — sign up in the UI, then in the Neon SQL editor:
+
+   ```sql
+   UPDATE "User" SET approved = true, role = 'admin' WHERE email = 'you@example.com';
+   ```
+
+   New sign-ups start unapproved: they can log in and browse but job
+   submission returns 403 until you set `approved = true` for them. Admins
+   (`role = 'admin'`) see every job; users see their own.
+
+Once you've verified login works, you can remove nginx basic auth (delete the
+`auth_basic` lines from the site config and `sudo systemctl reload nginx`) —
+or keep both for a while, belt and suspenders. Generated files under
+`/outputs/*` are still served by job-id URL (unguessable UUIDs) — signed URLs
+are a planned hardening step.
+
 ## 3. API reference
 
 | Endpoint | Description |
