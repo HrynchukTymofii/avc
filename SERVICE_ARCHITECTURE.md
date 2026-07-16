@@ -39,6 +39,7 @@ Two hardware tiers, decided 2026-07-11:
 | Image | Wan 5B single-frame | Standard | live | 1 /image |
 | Image | **FLUX.1** | Standard (fits L40S) | planned | 2 /image |
 | Character LoRA | **Wan2.2 LoRA training** (consistent character) | Standard (training) | built — GPU validation pending | 100 /training run |
+| Upscale | **Real-ESRGAN x4plus / anime** (image + video) | Standard | built — GPU validation pending | 1 /image · 10 /video |
 
 *Credits ≈ proportional to GPU-seconds; calibrate after measuring. Rule of
 thumb: 1 credit ≈ 10 GPU-seconds on the L40S; premium models priced at H100

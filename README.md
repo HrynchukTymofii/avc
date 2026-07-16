@@ -129,6 +129,20 @@ downloads, the trainer reads the same checkpoint the generators use.
 - Adapters live in `backend/models/loras/<id>/` (weights + metadata); delete
   them from the Style Lab page.
 
+## Upscaler: sharpen and enlarge (Real-ESRGAN)
+
+Upload an image (PNG/JPEG ≤ 20 MB, ≤ 4 MP) or a short video (MP4/MOV/WebM
+≤ 200 MB, ≤ 2 min) at `/upscale`, pick a model and a scale (2× or 4×):
+
+- **Photo / general** — Real-ESRGAN x4plus, for photos and realistic footage.
+- **Drawn / anime** — the anime-tuned variant; the right pick for stylized
+  characters and Style-Lab-generated art.
+
+Images take seconds; videos are decoded to frames, upscaled frame by frame
+(≈ 1 min of processing per second of footage) and reassembled with the
+original audio. Typical flow for the character content: generate a styled
+still → animate via B-roll I2V → upscale the clip.
+
 ## Honest speed expectations
 
 On the target g6e.2xlarge (NVIDIA L40S, 48 GB VRAM, 64 GB RAM):
@@ -140,6 +154,7 @@ On the target g6e.2xlarge (NVIDIA L40S, 48 GB VRAM, 64 GB RAM):
 | Still image (Wan single-frame) | ≈ 1 minute once the model is warm |
 | Full video | roughly the sum of its parts: 1–3 min per on-camera minute + 3–8 min per b-roll segment + ~1 min per still |
 | Style LoRA training | ≈ 1–2 h at 2000 steps (plus dataset caching); blocks the queue |
+| Upscale | seconds per image; ≈ 1 min per second of video |
 | First job after a restart | + 1–2 minutes (models load lazily on first use) |
 
 Queue a batch and collect results from the "Recent generations" grid — jobs
@@ -397,6 +412,7 @@ ssh -L 3000:localhost:3000 ubuntu@<elastic-ip>
 | `POST /api/talking-head` | multipart: `avatar` (PNG/JPEG ≤ 20 MB), `script` (≤ 20k chars), `voice` → `{"jobId"}` |
 | `POST /api/broll` | multipart: `prompt` (≤ 1k chars), `duration` (3–5), optional `image` → `{"jobId"}` |
 | `POST /api/image` | multipart: `prompt` (≤ 1k chars), `orientation` (`landscape`\|`portrait`\|`square`), optional `lora` + `lora_scale` → `{"jobId"}` |
+| `POST /api/upscale` | multipart: `file` (image ≤ 20 MB/4 MP or video ≤ 200 MB/2 min), `model` (`realesrgan-photo`\|`realesrgan-anime`), `scale` (2\|4) → `{"jobId"}` |
 | `POST /api/lora-training` | multipart: `name`, `trigger` (`[A-Za-z0-9_]{2,30}`), `images` (5–60 × PNG/JPEG), optional `description`, `steps` → `{"jobId"}` |
 | `GET /api/loras` | trained styles: `{"loras":[{"id","name","trigger","base","createdAt"}]}` |
 | `DELETE /api/loras/{id}` | remove a trained style |
