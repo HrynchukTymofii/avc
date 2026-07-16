@@ -23,8 +23,17 @@ services:
       context: ./frontend
       args:
         BACKEND_URL: http://backend:8000
+        NEXT_PUBLIC_AUTH_ENABLED: "${AUTH_ENABLED:-false}"
     restart: unless-stopped
     depends_on:
       - backend
+    environment:
+      # NextAuth + Neon (see .env.example); read at runtime by the Next server.
+      DATABASE_URL: "${DATABASE_URL:-}"
+      NEXTAUTH_URL: "${NEXTAUTH_URL:-}"
+      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET:-}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      API_JWT_SECRET: "${API_JWT_SECRET:-}"
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"

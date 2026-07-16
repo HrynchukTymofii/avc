@@ -1,8 +1,10 @@
 "use client";
 
+import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { AUTH_ENABLED } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -111,7 +113,52 @@ export function NavBar() {
             </div>
           ))}
         </nav>
+        <AccountMenu />
       </div>
     </header>
+  );
+}
+
+function AccountMenu() {
+  const { data: session, status } = useSession();
+  if (!AUTH_ENABLED || status === "loading") return null;
+
+  if (!session?.user) {
+    return (
+      <div className="ml-auto">
+        <Link
+          href="/sign-in"
+          className="rounded-md px-3 py-1.5 font-mono text-xs uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Sign in
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group relative ml-auto">
+      <button
+        type="button"
+        className="flex items-center gap-2 rounded-md px-3 py-1.5 font-mono text-xs uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <span className="max-w-32 truncate">{session.user.name || session.user.email}</span>
+      </button>
+      <div className="invisible absolute right-0 top-full z-50 min-w-44 rounded-md border bg-background p-1 opacity-0 shadow-lg transition-opacity duration-100 group-hover:visible group-hover:opacity-100">
+        <div className="px-3 py-2">
+          <p className="truncate text-xs text-foreground/90">{session.user.email}</p>
+          <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            {session.user.approved ? "approved" : "awaiting approval"}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => signOut({ callbackUrl: "/sign-in" })}
+          className="block w-full rounded px-3 py-2 text-left text-xs text-foreground/90 transition-colors hover:bg-secondary"
+        >
+          Sign out
+        </button>
+      </div>
+    </div>
   );
 }

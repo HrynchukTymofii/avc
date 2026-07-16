@@ -11,8 +11,12 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Baked into the rewrite rules at build time; "backend" is the compose service name.
 ARG BACKEND_URL=http://backend:8000
+# NEXT_PUBLIC_* is inlined at build time — auth on/off is a build decision.
+ARG NEXT_PUBLIC_AUTH_ENABLED=true
 ENV BACKEND_URL=${BACKEND_URL} \
+    NEXT_PUBLIC_AUTH_ENABLED=${NEXT_PUBLIC_AUTH_ENABLED} \
     NEXT_TELEMETRY_DISABLED=1
+# `npm run build` runs prisma generate first (schema only, no DB connection).
 RUN npm run build
 
 FROM node:22-alpine AS run
