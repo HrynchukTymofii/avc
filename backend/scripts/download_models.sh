@@ -52,6 +52,8 @@ download yzd-v/DWPose "$MODELS_DIR/dwpose" --include "dw-ll_ucoco_384.pth"
 download ManyOtherFunctions/face-parse-bisent "$MODELS_DIR/face-parse-bisent"
 
 # --- Wan2.2 TI2V-5B, diffusers layout (~35 GB) --------------------------------------
+# Also the base for style LoRA training (ai-toolkit reads this same checkpoint);
+# trained adapters land in $MODELS_DIR/loras/ — no extra downloads needed.
 download Wan-AI/Wan2.2-TI2V-5B-Diffusers "$MODELS_DIR/wan2.2-ti2v-5b"
 
 # --- FLUX.1-schnell, image generation (~34 GB, Apache 2.0) ---------------------------

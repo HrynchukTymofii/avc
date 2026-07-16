@@ -98,6 +98,27 @@ mods = md.packages_distributions(); \
 dists = sorted({d for m in ('flash_attn_interface', 'flash_attn', 'flash_attn_3') for d in mods.get(m, [])}); \
 subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y'] + dists) if dists else print('no flash-attn packages found')"
 
+# ---- Style LoRA trainer (ostris/ai-toolkit) ---------------------------------------
+# Trains Wan2.2 5B character/style LoRAs from the checkpoint already mounted at
+# /app/models/wan2.2-ti2v-5b (arch wan22_5b). It needs a newer torch than the
+# inference stack's pinned 2.4.1 (mmcv wheel matrix above), so it lives in its
+# own venv and the backend invokes it as a subprocess
+# (app/services/lora_training.py). cu126 wheels bundle their CUDA runtime and
+# run fine on this 12.4 base image.
+ARG AI_TOOLKIT_REF=main
+RUN git clone --depth 1 --branch ${AI_TOOLKIT_REF} \
+        https://github.com/ostris/ai-toolkit.git /opt/ai-toolkit \
+    && python3.11 -m venv /opt/trainer-venv \
+    && /opt/trainer-venv/bin/pip install --no-cache-dir --upgrade pip "setuptools<81" wheel \
+    && /opt/trainer-venv/bin/pip install --no-cache-dir \
+        torch==2.7.1 torchvision==0.22.1 \
+        --index-url https://download.pytorch.org/whl/cu126 \
+    && /opt/trainer-venv/bin/pip install --no-cache-dir -r /opt/ai-toolkit/requirements.txt \
+    # Build-time canary: the trainer venv must import its own torch and the
+    # toolkit entry point must parse — fail the build, not the first training job.
+    && /opt/trainer-venv/bin/python -c "import torch; print('trainer torch', torch.__version__)" \
+    && /opt/trainer-venv/bin/python -m py_compile /opt/ai-toolkit/run.py
+
 # MuseTalk resolves paths relative to the working directory and imports its
 # bundled face_detection package as a top-level module:
 #   ./musetalk/utils/dwpose/*.py           -> config shipped in the repo (symlink)
