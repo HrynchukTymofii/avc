@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { JobProgress } from "@/components/job-progress";
 import { ModelSelect } from "@/components/model-select";
 import { RecentJobs } from "@/components/recent-jobs";
+import { StyleSelect } from "@/components/style-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,7 @@ export default function ImagePage() {
   const [orientation, setOrientation] = useState<string>("landscape");
   const [model, setModel] = useState("");
   const [count, setCount] = useState<string>("1");
+  const [lora, setLora] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -57,6 +59,8 @@ export default function ImagePage() {
         orientation,
         model: model || undefined,
         count: Number(count),
+        // styles are trained on (and only apply to) the Wan2.2 5B engine
+        lora: model === "wan-5b" ? lora || undefined : undefined,
       });
       setJobId(response.jobId);
     } catch (error) {
@@ -106,8 +110,13 @@ export default function ImagePage() {
             />
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2">
             <ModelSelect kind="image" value={model} onChange={setModel} disabled={busy} />
+            <StyleSelect
+              value={model === "wan-5b" ? lora : ""}
+              onChange={setLora}
+              disabled={busy || model !== "wan-5b"}
+            />
             <div className="space-y-1.5">
               <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
                 Format

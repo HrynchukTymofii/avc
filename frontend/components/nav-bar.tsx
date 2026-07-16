@@ -49,6 +49,12 @@ const GROUPS: NavGroup[] = [
       { label: "FLUX.1 schnell", href: "/image?model=flux-schnell" },
     ],
   },
+  {
+    label: "Styles",
+    href: "/lora",
+    paths: ["/lora"],
+    items: [{ label: "Style Lab — train a LoRA on your images", href: "/lora" }],
+  },
 ];
 
 export function NavBar() {

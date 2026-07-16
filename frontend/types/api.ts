@@ -1,12 +1,22 @@
 /** TypeScript mirrors of the backend's Pydantic schemas (backend/app/schemas.py). */
 
-export type JobKind = "talking_head" | "broll" | "image" | "full_video";
+export type JobKind = "talking_head" | "broll" | "image" | "full_video" | "lora_training";
 
 export interface JobCreatedResponse {
   jobId: string;
 }
 
-export type Stage = "tts" | "motion" | "lip-sync" | "encoding" | "diffusion" | "starting";
+export type Stage =
+  | "tts"
+  | "motion"
+  | "lip-sync"
+  | "encoding"
+  | "diffusion"
+  | "starting"
+  | "preparing dataset"
+  | "freeing gpu"
+  | "training"
+  | "saving style";
 
 export const STAGE_LABELS: Record<Stage, string> = {
   starting: "Starting",
@@ -15,6 +25,10 @@ export const STAGE_LABELS: Record<Stage, string> = {
   "lip-sync": "Animating avatar",
   diffusion: "Generating", // shared by video and image jobs
   encoding: "Encoding video",
+  "preparing dataset": "Preparing dataset",
+  "freeing gpu": "Freeing the GPU",
+  training: "Training style",
+  "saving style": "Saving style",
 };
 
 export function stageLabel(stage: string): string {
@@ -25,7 +39,15 @@ export function stageLabel(stage: string): string {
 export type JobStatus =
   | { status: "queued"; position: number }
   | { status: "processing"; progress: number; stage: string; audio?: string }
-  | { status: "finished"; video?: string; audio?: string; image?: string; images?: string[] }
+  | {
+      status: "finished";
+      video?: string;
+      audio?: string;
+      image?: string;
+      images?: string[];
+      /** Trained style id (lora-training jobs only). */
+      lora?: string;
+    }
   | { status: "failed"; error: string };
 
 export interface JobSummary {
@@ -54,6 +76,18 @@ export interface EngineInfo {
 
 export interface ModelsResponse {
   models: Record<string, EngineInfo[]>;
+}
+
+export interface LoraStyle {
+  id: string;
+  name: string;
+  trigger: string;
+  base: string;
+  createdAt: string; // ISO 8601
+}
+
+export interface LorasResponse {
+  loras: LoraStyle[];
 }
 
 export interface Voice {

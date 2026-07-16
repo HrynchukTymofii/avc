@@ -6,6 +6,7 @@ import { FileDropzone } from "@/components/file-dropzone";
 import { JobProgress } from "@/components/job-progress";
 import { ModelSelect } from "@/components/model-select";
 import { RecentJobs } from "@/components/recent-jobs";
+import { StyleSelect } from "@/components/style-select";
 import { VideoPreview } from "@/components/video-preview";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ export default function BrollPage() {
   const [duration, setDuration] = useState<string>("5");
   const [image, setImage] = useState<File | null>(null);
   const [model, setModel] = useState("");
+  const [lora, setLora] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -53,6 +55,8 @@ export default function BrollPage() {
         duration: Number(duration),
         image,
         model: model || undefined,
+        // styles are trained on (and only apply to) the Wan2.2 5B engine
+        lora: model === "wan-5b" ? lora || undefined : undefined,
       });
       setJobId(response.jobId);
     } catch (error) {
@@ -103,7 +107,14 @@ export default function BrollPage() {
             />
           </div>
 
-          <ModelSelect kind="broll" value={model} onChange={setModel} disabled={busy} />
+          <div className="grid gap-5 sm:grid-cols-2">
+            <ModelSelect kind="broll" value={model} onChange={setModel} disabled={busy} />
+            <StyleSelect
+              value={model === "wan-5b" ? lora : ""}
+              onChange={setLora}
+              disabled={busy || model !== "wan-5b"}
+            />
+          </div>
 
           <div className="grid gap-5 sm:grid-cols-[1fr_2fr]">
             <div className="space-y-1.5">

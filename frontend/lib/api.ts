@@ -9,6 +9,7 @@ import type {
   JobKind,
   JobListResponse,
   JobStatus,
+  LorasResponse,
   ModelsResponse,
   VoicesResponse,
 } from "@/types/api";
@@ -62,12 +63,14 @@ export async function submitBroll(input: {
   duration: number;
   image?: File | null;
   model?: string;
+  lora?: string;
 }): Promise<JobCreatedResponse> {
   const form = new FormData();
   form.append("prompt", input.prompt);
   form.append("duration", String(input.duration));
   if (input.image) form.append("image", input.image);
   if (input.model) form.append("model", input.model);
+  if (input.lora) form.append("lora", input.lora);
   return handle(await fetch("/api/broll", { method: "POST", body: form }));
 }
 
@@ -76,13 +79,44 @@ export async function submitImage(input: {
   orientation: string;
   model?: string;
   count?: number;
+  lora?: string;
 }): Promise<JobCreatedResponse> {
   const form = new FormData();
   form.append("prompt", input.prompt);
   form.append("orientation", input.orientation);
   if (input.model) form.append("model", input.model);
   if (input.count && input.count > 1) form.append("count", String(input.count));
+  if (input.lora) form.append("lora", input.lora);
   return handle(await fetch("/api/image", { method: "POST", body: form }));
+}
+
+export async function submitLoraTraining(input: {
+  name: string;
+  trigger: string;
+  images: File[];
+  description?: string;
+  steps?: number;
+}): Promise<JobCreatedResponse> {
+  const form = new FormData();
+  form.append("name", input.name);
+  form.append("trigger", input.trigger);
+  for (const image of input.images) form.append("images", image);
+  if (input.description) form.append("description", input.description);
+  if (input.steps) form.append("steps", String(input.steps));
+  return handle(await fetch("/api/lora-training", { method: "POST", body: form }));
+}
+
+export async function getLoras(): Promise<LorasResponse> {
+  return handle(await fetch("/api/loras"));
+}
+
+export async function deleteLora(id: string): Promise<void> {
+  const response = await fetch(`/api/loras/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw new ApiRequestError(`Delete failed (${response.status})`, response.status);
+  }
 }
 
 export async function submitFullVideo(input: {
