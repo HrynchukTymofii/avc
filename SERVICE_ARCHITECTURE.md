@@ -38,10 +38,53 @@ Two hardware tiers, decided 2026-07-11:
 | B-roll video | **Wan2.2 T2V/I2V-A14B** (high quality) | Premium | planned | 30 /5 s clip |
 | Image | Wan 5B single-frame | Standard | live | 1 /image |
 | Image | **FLUX.1** | Standard (fits L40S) | planned | 2 /image |
+| Character LoRA | **Wan2.2 LoRA training** (consistent character) | Standard (training) | built — GPU validation pending | 100 /training run |
 
 *Credits ≈ proportional to GPU-seconds; calibrate after measuring. Rule of
 thumb: 1 credit ≈ 10 GPU-seconds on the L40S; premium models priced at H100
 cost (~2× the $/hour of the L40S).
+
+### Consistent character via LoRA (added 2026-07-12, BUILT 2026-07-16)
+
+Train a small LoRA adapter on ~20–50 captioned images of one character (all
+tied to a made-up trigger word); load it alongside the base Wan model and the
+trigger word renders the same person in any b-roll/image prompt.
+
+**Built as the "Style Lab" (2026-07-16, GPU validation pending):** trainer is
+**ostris/ai-toolkit** (arch `wan22_5b`), not musubi-tuner — research showed
+musubi-tuner only trains the Wan2.2 *14B* models, while ai-toolkit trains the
+TI2V-5B directly **from the diffusers checkpoint already on disk** (no extra
+weights). It runs from its own venv in the backend image (needs torch ≥ 2.7;
+the inference stack is pinned to 2.4.1 for mmcv) as a subprocess job kind
+(`lora_training`): upload 5–60 images at `/lora` → captions + config generated
+→ GPU fully released → training (default 2000 steps ≈ 1–2 h on the L40S) →
+adapter installed under `models/loras/<id>/` → selectable as "Style" on the
+Image/B-roll pages (trigger word auto-prepended; diffusers `load_lora_weights`
+applied around generation). First-run risk: the saved LoRA key format must
+load into diffusers' WanPipeline — verify on GPU day.
+
+- Multiple characters: one training run + trigger word per character.
+- Zero-training interim: feed a reference still of the character into I2V for
+  per-shot consistency (drifts across shots; LoRA is the real fix).
+- The A14B models are two experts (high-noise + low-noise) — a future premium
+  LoRA would train both (musubi-tuner handles that tier).
+
+### Planned: full-frame talking head / "frozen hat" fix (added 2026-07-12)
+
+MuseTalk only inpaints the mouth region, so everything else in the portrait
+(hat, hair, shoulders) is a frozen frame — visible in Full Video on-camera
+segments. Fix = the already-planned **Wan2.2-S2V-14B** (portrait + voiceover
+audio → whole person animated); when it lands it should also replace MuseTalk
+for Full Video on-camera segments. Lighter interim candidates if needed:
+Sonic, EchoMimic-v2, Hallo3 (animate the whole head).
+
+**Decision 2026-07-16: S2V-14B does not have to wait for the H100.** With fp8
+quantization and block-swap offloading (community-standard on 24 GB cards) the
+14B model runs on the 48 GB L40S at maybe 2–4× native runtime — impractical
+for 20-minute monologues, but viable for short on-camera segments (10–30 s,
+Full Video style). Plan: integrate S2V-14B on the L40S behind the existing
+`wan-s2v` scaffold, accept slow, and move it to native speed when the premium
+GPU lands.
 
 **Licensing gate before charging money:** S2 Pro (research license — needs a
 commercial license or replacement, e.g. XTTS/Fish commercial plan), FLUX.1-dev
@@ -194,7 +237,11 @@ Same shapes, bigger numbers, plus operational maturity:
 4. **Credit ledger + Stripe checkout + free-tier grant.**
 5. **Premium scaffolds live** the week the H100 exists: S2V-14B, Animate-14B,
    A14B — integrated and debugged on the real card, then flipped `available`.
-6. **Control/work plane split** when concurrent users hurt (Stage B).
+   S2V then also becomes the Full Video on-camera engine (frozen-hat fix).
+6. **Character LoRA training** — BUILT 2026-07-16 as the Style Lab
+   (ostris/ai-toolkit, Wan2.2 5B base, user-facing from day one); first GPU
+   training run still pending.
+7. **Control/work plane split** when concurrent users hurt (Stage B).
 
 License review (S2 Pro replacement or commercial license) must land before
 step 4 charges anyone real money.

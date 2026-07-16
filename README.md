@@ -107,6 +107,28 @@ Paste this into Claude/ChatGPT together with your topic:
 > but never put a colon inside a voice tag, colons are reserved for visual
 > markers. Output plain text only.
 
+## Style Lab: train your own style (LoRA)
+
+Upload 20–50 varied images of a character, drawing style, or brand look at
+`/lora`, pick a made-up **trigger word** (letters/digits/underscores, e.g.
+`zorblatt_style`), and start training. The backend trains a LoRA adapter on
+the Wan2.2 5B base with [ostris/ai-toolkit](https://github.com/ostris/ai-toolkit)
+(bundled in the backend image, running from its own venv) — no extra model
+downloads, the trainer reads the same checkpoint the generators use.
+
+- Training takes **1–2 hours** for the standard 2000 steps on the L40S and
+  blocks the GPU queue for the whole run — start it when you're done generating.
+- Finished styles appear in the **Style** dropdown on the Image and B-roll
+  pages. The trigger word is added to your prompt automatically; the same
+  adapter styles both stills and video (and stills can be animated via the
+  B-roll reference-image flow).
+- Dataset tips: vary poses, backgrounds and crops; keep the character/style
+  itself consistent; a short optional "style description" is appended to every
+  caption. Multiple characters in one style is possible — give each its own
+  training run and trigger word for best results.
+- Adapters live in `backend/models/loras/<id>/` (weights + metadata); delete
+  them from the Style Lab page.
+
 ## Honest speed expectations
 
 On the target g6e.2xlarge (NVIDIA L40S, 48 GB VRAM, 64 GB RAM):
@@ -117,6 +139,7 @@ On the target g6e.2xlarge (NVIDIA L40S, 48 GB VRAM, 64 GB RAM):
 | B-roll clip (5 s, 704×1280) | ≈ 3–8 minutes per clip |
 | Still image (Wan single-frame) | ≈ 1 minute once the model is warm |
 | Full video | roughly the sum of its parts: 1–3 min per on-camera minute + 3–8 min per b-roll segment + ~1 min per still |
+| Style LoRA training | ≈ 1–2 h at 2000 steps (plus dataset caching); blocks the queue |
 | First job after a restart | + 1–2 minutes (models load lazily on first use) |
 
 Queue a batch and collect results from the "Recent generations" grid — jobs
@@ -373,7 +396,10 @@ ssh -L 3000:localhost:3000 ubuntu@<elastic-ip>
 |---|---|
 | `POST /api/talking-head` | multipart: `avatar` (PNG/JPEG ≤ 20 MB), `script` (≤ 20k chars), `voice` → `{"jobId"}` |
 | `POST /api/broll` | multipart: `prompt` (≤ 1k chars), `duration` (3–5), optional `image` → `{"jobId"}` |
-| `POST /api/image` | multipart: `prompt` (≤ 1k chars), `orientation` (`landscape`\|`portrait`\|`square`) → `{"jobId"}` |
+| `POST /api/image` | multipart: `prompt` (≤ 1k chars), `orientation` (`landscape`\|`portrait`\|`square`), optional `lora` + `lora_scale` → `{"jobId"}` |
+| `POST /api/lora-training` | multipart: `name`, `trigger` (`[A-Za-z0-9_]{2,30}`), `images` (5–60 × PNG/JPEG), optional `description`, `steps` → `{"jobId"}` |
+| `GET /api/loras` | trained styles: `{"loras":[{"id","name","trigger","base","createdAt"}]}` |
+| `DELETE /api/loras/{id}` | remove a trained style |
 | `GET /api/status/{jobId}` | `{"status":"queued","position":1}` / `{"status":"processing","progress":62,"stage":"lip-sync"}` / `{"status":"finished","video":...,"audio":...,"image":...}` / `{"status":"failed","error":...}` |
 | `GET /api/jobs?kind=&limit=` | recent jobs for the UI grids |
 | `GET /api/voices` | configured voice presets |
