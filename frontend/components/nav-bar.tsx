@@ -38,6 +38,7 @@ const GROUPS: NavGroup[] = [
       { label: "B-roll — Wan2.2 5B", href: "/broll?model=wan-5b" },
       { label: "B-roll — A14B high quality", href: "#", premium: true },
       { label: "Character video — Animate 14B", href: "#", premium: true },
+      { label: "Upscale video — Real-ESRGAN", href: "/upscale" },
     ],
   },
   {
@@ -47,6 +48,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { label: "Wan2.2 5B — single frame", href: "/image?model=wan-5b" },
       { label: "FLUX.1 schnell", href: "/image?model=flux-schnell" },
+      { label: "Upscale image — Real-ESRGAN", href: "/upscale" },
     ],
   },
   {

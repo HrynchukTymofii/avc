@@ -1,6 +1,12 @@
 /** TypeScript mirrors of the backend's Pydantic schemas (backend/app/schemas.py). */
 
-export type JobKind = "talking_head" | "broll" | "image" | "full_video" | "lora_training";
+export type JobKind =
+  | "talking_head"
+  | "broll"
+  | "image"
+  | "full_video"
+  | "lora_training"
+  | "upscale";
 
 export interface JobCreatedResponse {
   jobId: string;
@@ -16,7 +22,9 @@ export type Stage =
   | "preparing dataset"
   | "freeing gpu"
   | "training"
-  | "saving style";
+  | "saving style"
+  | "extracting frames"
+  | "upscaling";
 
 export const STAGE_LABELS: Record<Stage, string> = {
   starting: "Starting",
@@ -29,6 +37,8 @@ export const STAGE_LABELS: Record<Stage, string> = {
   "freeing gpu": "Freeing the GPU",
   training: "Training style",
   "saving style": "Saving style",
+  "extracting frames": "Extracting frames",
+  upscaling: "Upscaling",
 };
 
 export function stageLabel(stage: string): string {

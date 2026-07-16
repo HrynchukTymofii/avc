@@ -90,6 +90,18 @@ export async function submitImage(input: {
   return handle(await fetch("/api/image", { method: "POST", body: form }));
 }
 
+export async function submitUpscale(input: {
+  file: File;
+  model?: string;
+  scale?: number;
+}): Promise<JobCreatedResponse> {
+  const form = new FormData();
+  form.append("file", input.file);
+  if (input.model) form.append("model", input.model);
+  if (input.scale) form.append("scale", String(input.scale));
+  return handle(await fetch("/api/upscale", { method: "POST", body: form }));
+}
+
 export async function submitLoraTraining(input: {
   name: string;
   trigger: string;
