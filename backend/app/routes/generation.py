@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.config import Settings
-from app.deps import get_settings_dep, get_worker
+from app.deps import get_loras, get_settings_dep, get_worker
 from app.models_catalog import Engine, get_engine, is_available
 from app.pipelines.wan_pipeline import IMAGE_SIZES
 from app.queue.job import (
@@ -16,6 +16,7 @@ from app.queue.job import (
     FullVideoParams,
     ImageParams,
     Job,
+    LoraTrainingParams,
     TalkingHeadParams,
     new_job_id,
 )
@@ -23,6 +24,7 @@ from app.queue.worker import GPUWorker
 from app.routes.voices import get_voices
 from app.schemas import ErrorResponse, JobCreatedResponse, JobKind
 from app.services import ffmpeg
+from app.services.loras import TRIGGER_RE, LoraRegistry, LoraStyleInfo
 from app.services.script_parser import SegmentKind, parse_full_video_script
 from app.services.validation import (
     InputValidationError,
@@ -42,6 +44,34 @@ _RESPONSES = {422: {"model": ErrorResponse}}
 def _label(text: str, limit: int = 60) -> str:
     collapsed = " ".join(text.split())
     return collapsed[:limit].rstrip() + ("…" if len(collapsed) > limit else "")
+
+
+def _resolve_lora(
+    lora: str, engine: Engine, registry: LoraRegistry
+) -> LoraStyleInfo | None:
+    """Validate a requested style adapter against the registry and the engine.
+    Styles are trained on (and only apply to) the Wan2.2 5B family."""
+    if not lora:
+        return None
+    info = registry.get(lora)
+    if info is None:
+        raise InputValidationError(
+            f"unknown style {lora!r} — see /api/loras for trained styles"
+        )
+    if engine.id != "wan-5b":
+        raise InputValidationError(
+            f"style {info.name!r} was trained for the Wan2.2 5B engine — "
+            f"it cannot be applied to model {engine.id!r}"
+        )
+    return info
+
+
+def _prompt_with_trigger(prompt: str, style: LoraStyleInfo | None) -> str:
+    """The trigger word must appear in the prompt for the adapter to fire;
+    prepend it when the user leaves it out."""
+    if style is None or style.trigger.lower() in prompt.lower():
+        return prompt
+    return f"{style.trigger}, {prompt}"
 
 
 def _resolve_engine(kind: JobKind, model: str, settings: Settings) -> Engine:
@@ -110,13 +140,18 @@ async def create_talking_head(
 async def create_broll(
     settings: Annotated[Settings, Depends(get_settings_dep)],
     worker: Annotated[GPUWorker, Depends(get_worker)],
+    loras: Annotated[LoraRegistry, Depends(get_loras)],
     prompt: Annotated[str, Form()],
     duration: Annotated[int, Form(ge=3, le=5)],
     image: Annotated[UploadFile | None, File()] = None,
     model: Annotated[str, Form()] = "wan-5b",
+    lora: Annotated[str, Form()] = "",
+    lora_scale: Annotated[float, Form(ge=0.1, le=2.0)] = 1.0,
 ) -> JobCreatedResponse:
     engine = _resolve_engine(JobKind.BROLL, model, settings)
     prompt = validate_text(prompt, field="prompt", max_chars=settings.max_prompt_chars)
+    style = _resolve_lora(lora, engine, loras)
+    prompt = _prompt_with_trigger(prompt, style)
 
     job_id = new_job_id()
     image_path = None
@@ -132,7 +167,13 @@ async def create_broll(
         id=job_id,
         kind=JobKind.BROLL,
         params=BrollParams(
-            prompt=prompt, duration_s=duration, image_path=image_path, model=engine.id
+            prompt=prompt,
+            duration_s=duration,
+            image_path=image_path,
+            model=engine.id,
+            lora_id=style.id if style else None,
+            lora_path=style.weights_path if style else None,
+            lora_scale=lora_scale,
         ),
         label=_label(prompt),
     )
@@ -144,13 +185,18 @@ async def create_broll(
 async def create_image(
     settings: Annotated[Settings, Depends(get_settings_dep)],
     worker: Annotated[GPUWorker, Depends(get_worker)],
+    loras: Annotated[LoraRegistry, Depends(get_loras)],
     prompt: Annotated[str, Form()],
     orientation: Annotated[str, Form()] = "landscape",
     model: Annotated[str, Form()] = "wan-5b",
     count: Annotated[int, Form(ge=1, le=4)] = 1,
+    lora: Annotated[str, Form()] = "",
+    lora_scale: Annotated[float, Form(ge=0.1, le=2.0)] = 1.0,
 ) -> JobCreatedResponse:
     engine = _resolve_engine(JobKind.IMAGE, model, settings)
     prompt = validate_text(prompt, field="prompt", max_chars=settings.max_prompt_chars)
+    style = _resolve_lora(lora, engine, loras)
+    prompt = _prompt_with_trigger(prompt, style)
     if orientation not in IMAGE_SIZES:
         raise InputValidationError(
             f"orientation must be one of {', '.join(sorted(IMAGE_SIZES))}"
@@ -160,7 +206,13 @@ async def create_image(
         id=new_job_id(),
         kind=JobKind.IMAGE,
         params=ImageParams(
-            prompt=prompt, orientation=orientation, model=engine.id, count=count
+            prompt=prompt,
+            orientation=orientation,
+            model=engine.id,
+            count=count,
+            lora_id=style.id if style else None,
+            lora_path=style.weights_path if style else None,
+            lora_scale=lora_scale,
         ),
         label=_label(prompt),
     )
@@ -266,6 +318,77 @@ async def create_full_video(
             model=engine.id,
         ),
         label=_label(script),
+    )
+    await worker.submit(job)
+    return JobCreatedResponse(job_id=job_id)
+
+
+@router.post("/lora-training", response_model=JobCreatedResponse, responses=_RESPONSES)
+async def create_lora_training(
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+    worker: Annotated[GPUWorker, Depends(get_worker)],
+    name: Annotated[str, Form()],
+    trigger: Annotated[str, Form()],
+    images: Annotated[list[UploadFile], File()],
+    description: Annotated[str, Form()] = "",
+    steps: Annotated[int, Form(ge=0)] = 0,
+    model: Annotated[str, Form()] = "wan22-5b-lora",
+) -> JobCreatedResponse:
+    _resolve_engine(JobKind.LORA_TRAINING, model, settings)
+    name = validate_text(name, field="name", max_chars=60)
+    trigger = trigger.strip()
+    if not TRIGGER_RE.match(trigger):
+        raise InputValidationError(
+            "trigger must be a single made-up word: 2-30 letters, digits or "
+            "underscores (e.g. 'zork_style')"
+        )
+    description = description.strip()
+    if description:
+        description = validate_text(
+            description, field="description", max_chars=settings.max_prompt_chars
+        )
+    steps = steps or settings.lora_default_steps
+    if steps > settings.lora_max_steps:
+        raise InputValidationError(
+            f"steps must be at most {settings.lora_max_steps}"
+        )
+
+    uploads = [u for u in images if u.filename or u.size]
+    if len(uploads) < settings.lora_min_images:
+        raise InputValidationError(
+            f"at least {settings.lora_min_images} training images are required "
+            f"(got {len(uploads)}) — 20-50 varied images of the character/style "
+            "work best"
+        )
+    if len(uploads) > settings.lora_max_images:
+        raise InputValidationError(
+            f"at most {settings.lora_max_images} training images are allowed "
+            f"(got {len(uploads)})"
+        )
+
+    job_id = new_job_id()
+    dataset_dir = settings.outputs_dir / job_id / "inputs" / "dataset"
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    for index, upload in enumerate(uploads):
+        image_bytes, extension = await read_image_upload(
+            upload,
+            max_bytes=settings.max_upload_bytes,
+            field=f"image {upload.filename or index + 1!r}",
+        )
+        (dataset_dir / f"img_{index:03d}{extension}").write_bytes(image_bytes)
+
+    job = Job(
+        id=job_id,
+        kind=JobKind.LORA_TRAINING,
+        params=LoraTrainingParams(
+            name=name,
+            trigger=trigger,
+            dataset_dir=dataset_dir,
+            image_count=len(uploads),
+            description=description or None,
+            steps=steps,
+        ),
+        label=f"{name} · {len(uploads)} images",
     )
     await worker.submit(job)
     return JobCreatedResponse(job_id=job_id)

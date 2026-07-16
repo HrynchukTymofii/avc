@@ -50,6 +50,7 @@ def _status_for(job: Job, store: JobStore) -> StatusResponse:
             audio=job.outputs.get("audio"),
             image=job.outputs.get("image"),
             images=_image_urls(job.outputs),
+            lora=job.outputs.get("lora"),
         )
     return FailedStatus(error=job.error or "Unknown error")
 

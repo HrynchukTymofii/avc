@@ -63,6 +63,14 @@ CATALOG: tuple[Engine, ...] = (
         "full-video", "Full video (tagged script)", JobKind.FULL_VIDEO,
         "standard", "varies / script", "wan", default=True,
     ),
+    # ---- style LoRA training -------------------------------------------------------
+    # Trains on the Wan2.2 5B base via ostris/ai-toolkit in a subprocess; the
+    # processor frees the whole GPU instead of acquiring a managed pipeline, so
+    # `pipeline` names the family the finished adapter applies to.
+    Engine(
+        "wan22-5b-lora", "Style training (Wan2.2 5B LoRA)", JobKind.LORA_TRAINING,
+        "standard", "100 / run", "wan", default=True,
+    ),
     # ---- image -------------------------------------------------------------------
     Engine(
         "wan-5b", "Wan2.2 5B (single frame)", JobKind.IMAGE,

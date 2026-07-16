@@ -45,6 +45,10 @@ class BrollParams:
     duration_s: int
     image_path: Path | None
     model: str = "wan-5b"  # engine id from models_catalog
+    # Trained style adapter to apply (see services.loras); path resolved at submit.
+    lora_id: str | None = None
+    lora_path: Path | None = None
+    lora_scale: float = 1.0
 
 
 @dataclass
@@ -53,6 +57,10 @@ class ImageParams:
     orientation: str  # key of wan_pipeline.IMAGE_SIZES
     model: str = "wan-5b"  # engine id from models_catalog
     count: int = 1  # variations per prompt (1-4), distinct seeds
+    # Trained style adapter to apply (see services.loras); path resolved at submit.
+    lora_id: str | None = None
+    lora_path: Path | None = None
+    lora_scale: float = 1.0
 
 
 @dataclass
@@ -67,7 +75,21 @@ class FullVideoParams:
     model: str = "full-video"  # engine id from models_catalog
 
 
-JobParams = TalkingHeadParams | BrollParams | ImageParams | FullVideoParams
+@dataclass
+class LoraTrainingParams:
+    # Style/character LoRA training on the Wan2.2 5B base (ostris/ai-toolkit).
+    name: str  # display name for the finished style
+    trigger: str  # trigger word baked into every caption
+    dataset_dir: Path  # uploaded training images (captions written at run time)
+    image_count: int
+    description: str | None = None  # optional style hint appended to captions
+    steps: int = 2000
+    model: str = "wan22-5b-lora"  # engine id from models_catalog
+
+
+JobParams = (
+    TalkingHeadParams | BrollParams | ImageParams | FullVideoParams | LoraTrainingParams
+)
 
 
 def new_job_id() -> str:

@@ -42,6 +42,18 @@ class Settings(BaseSettings):
     job_timeout_s: float = 7_200.0
     recent_jobs_limit: int = 20
 
+    # ---- style LoRA training (ostris/ai-toolkit on the Wan2.2 5B base) ----------
+    lora_min_images: int = 5
+    lora_max_images: int = 60
+    lora_default_steps: int = 2000
+    lora_max_steps: int = 4000
+    # ~1.5-3 s/step on the L40S: 2000 steps ≈ 1-2 h, plus dataset caching.
+    lora_timeout_s: float = 21_600.0
+    # The trainer lives in its own venv — its torch is newer than the inference
+    # stack's (see backend/Dockerfile trainer stage).
+    trainer_python: Path = Path("/opt/trainer-venv/bin/python")
+    trainer_script: Path = Path("/opt/ai-toolkit/run.py")
+
     wan_variant: str = "ti2v-5b"
     vram_reserve_gb: float = 2.0
     # S2 evicted-from-GPU weights are dropped, not parked in RAM: the animate
@@ -76,8 +88,20 @@ class Settings(BaseSettings):
     def voices_dir(self) -> Path:
         return self.assets_dir / "voices"
 
+    @property
+    def loras_dir(self) -> Path:
+        # Trained style adapters live with the model weights, not the job outputs:
+        # they survive output cleanups and ship on the same volume.
+        return self.models_dir / "loras"
+
     def ensure_dirs(self) -> None:
-        for directory in (self.models_dir, self.outputs_dir, self.assets_dir, self.voices_dir):
+        for directory in (
+            self.models_dir,
+            self.outputs_dir,
+            self.assets_dir,
+            self.voices_dir,
+            self.loras_dir,
+        ):
             directory.mkdir(parents=True, exist_ok=True)
 
 

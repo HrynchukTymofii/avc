@@ -15,6 +15,7 @@ class JobKind(str, Enum):
     BROLL = "broll"
     IMAGE = "image"
     FULL_VIDEO = "full_video"
+    LORA_TRAINING = "lora_training"
 
 
 class JobCreatedResponse(BaseModel):
@@ -72,7 +73,8 @@ class ProcessingStatus(BaseModel):
 
 class FinishedStatus(BaseModel):
     # `audio` is talking-head only; `video` is absent for voice-only jobs;
-    # `image` is image jobs only.
+    # `image` is image jobs only; `lora` is the trained style id for
+    # lora-training jobs.
     # Routes serialize with exclude_none so absent keys are omitted, not null.
     status: Literal["finished"] = "finished"
     video: str | None = None
@@ -80,6 +82,7 @@ class FinishedStatus(BaseModel):
     image: str | None = None
     # All generated images for multi-image jobs (image holds the first one).
     images: list[str] | None = None
+    lora: str | None = None
 
 
 class FailedStatus(BaseModel):
@@ -126,6 +129,23 @@ class Voice(BaseModel):
 
 class VoicesResponse(BaseModel):
     voices: list[Voice]
+
+
+# ---- style LoRAs -------------------------------------------------------------------
+
+
+class LoraStyle(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    name: str
+    trigger: str
+    base: str  # engine family the adapter was trained for ("wan-5b")
+    created_at: datetime = Field(serialization_alias="createdAt")
+
+
+class LorasResponse(BaseModel):
+    loras: list[LoraStyle]
 
 
 # ---- model catalog ---------------------------------------------------------------

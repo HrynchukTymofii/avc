@@ -41,15 +41,21 @@ class BrollProcessor:
 
         report(0, "diffusion")
         async with self._manager.acquire(pipeline_name) as wan:
-            await asyncio.to_thread(
-                wan.generate,
-                prompt=params.prompt,
-                duration_s=params.duration_s,
-                image_path=params.image_path,
-                out_path=raw_path,
-                on_progress=lambda f: report(int(f * _DIFFUSION_END), "diffusion"),
-                seed=seed,
-            )
+            if params.lora_path is not None:
+                await asyncio.to_thread(wan.set_lora, params.lora_path, params.lora_scale)
+            try:
+                await asyncio.to_thread(
+                    wan.generate,
+                    prompt=params.prompt,
+                    duration_s=params.duration_s,
+                    image_path=params.image_path,
+                    out_path=raw_path,
+                    on_progress=lambda f: report(int(f * _DIFFUSION_END), "diffusion"),
+                    seed=seed,
+                )
+            finally:
+                if params.lora_path is not None:
+                    await asyncio.to_thread(wan.clear_lora)
 
         report(_DIFFUSION_END, "encoding")
         await ffmpeg.encode_h264(raw_path, final_path)

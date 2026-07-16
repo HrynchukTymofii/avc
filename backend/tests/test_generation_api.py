@@ -249,6 +249,112 @@ def test_full_video_accepts_playable_clip(fv_client: TestClient, tmp_path: Path)
     assert (tmp_path / "outputs" / job_id / "inputs" / "clip_0.mp4").is_file()
 
 
+# ---- POST /api/lora-training and the `lora` field --------------------------------
+
+
+def post_lora_training(client: TestClient, *, image_count: int = 5, **overrides):
+    data = {"name": "Ink Sketch", "trigger": "1nk_style"}
+    data.update(overrides)
+    files = [
+        ("images", (f"img_{i}.png", png_bytes(), "image/png")) for i in range(image_count)
+    ]
+    return client.post("/api/lora-training", data=data, files=files)
+
+
+def install_test_style(tmp_path: Path):
+    from app.services.loras import LoraRegistry
+
+    weights = tmp_path / "trained.safetensors"
+    weights.write_bytes(b"LORA")
+    registry = LoraRegistry(tmp_path / "models" / "loras")
+    return registry.install(weights, name="Ink Sketch", trigger="1nk_style")
+
+
+def test_lora_training_accepts_and_queues(client: TestClient, tmp_path: Path) -> None:
+    response = post_lora_training(client)
+    assert response.status_code == 200
+    job_id = response.json()["jobId"]
+
+    dataset = tmp_path / "outputs" / job_id / "inputs" / "dataset"
+    assert len(list(dataset.glob("img_*.png"))) == 5
+
+    jobs = client.get("/api/jobs?kind=lora_training").json()["jobs"]
+    assert any(j["jobId"] == job_id for j in jobs)
+
+
+def test_lora_training_rejects_too_few_images(client: TestClient) -> None:
+    response = post_lora_training(client, image_count=2)
+    assert response.status_code == 422
+    assert "at least 5 training images" in response.json()["detail"]
+
+
+def test_lora_training_rejects_bad_trigger(client: TestClient) -> None:
+    for trigger in ("x", "two words", "hy-phen", "a" * 31):
+        response = post_lora_training(client, trigger=trigger)
+        assert response.status_code == 422, trigger
+        assert "trigger must be" in response.json()["detail"]
+
+
+def test_lora_training_rejects_too_many_steps(client: TestClient) -> None:
+    response = post_lora_training(client, steps="99999")
+    assert response.status_code == 422
+    assert "steps must be at most" in response.json()["detail"]
+
+
+def test_lora_training_rejects_non_image(client: TestClient) -> None:
+    files = [("images", (f"img_{i}.png", png_bytes(), "image/png")) for i in range(4)]
+    files.append(("images", ("bad.png", b"not an image", "image/png")))
+    response = client.post(
+        "/api/lora-training", data={"name": "S", "trigger": "1nk_style"}, files=files
+    )
+    assert response.status_code == 422
+    assert "not a valid image" in response.json()["detail"]
+
+
+def test_image_rejects_unknown_style(client: TestClient) -> None:
+    response = client.post(
+        "/api/image", data={"prompt": "a harbour", "lora": "no-such-style"}
+    )
+    assert response.status_code == 422
+    assert "unknown style" in response.json()["detail"]
+
+
+def test_image_style_prepends_trigger(client: TestClient, tmp_path: Path) -> None:
+    style = install_test_style(tmp_path)
+    response = client.post(
+        "/api/image", data={"prompt": "a harbour at dawn", "lora": style.id}
+    )
+    assert response.status_code == 200
+    job_id = response.json()["jobId"]
+
+    jobs = client.get("/api/jobs?kind=image").json()["jobs"]
+    label = next(j["label"] for j in jobs if j["jobId"] == job_id)
+    assert label.startswith("1nk_style, a harbour at dawn")
+
+
+def test_broll_style_not_applicable_to_other_models(client: TestClient, tmp_path: Path) -> None:
+    style = install_test_style(tmp_path)
+    response = client.post(
+        "/api/image",
+        data={"prompt": "a harbour", "lora": style.id, "model": "flux-schnell"},
+    )
+    assert response.status_code == 422
+    assert "cannot be applied" in response.json()["detail"]
+
+
+def test_broll_accepts_style(client: TestClient, tmp_path: Path) -> None:
+    style = install_test_style(tmp_path)
+    response = client.post(
+        "/api/broll",
+        data={"prompt": "1nk_style, the character waves", "duration": 3, "lora": style.id},
+    )
+    assert response.status_code == 200
+    # trigger already present — not duplicated
+    jobs = client.get("/api/jobs?kind=broll").json()["jobs"]
+    label = jobs[0]["label"]
+    assert label.count("1nk_style") == 1
+
+
 def test_submitted_job_fails_gracefully_without_models(client: TestClient) -> None:
     """On this dev machine there is no torch/fish-speech: the job must fail with a
     clear error while the server stays healthy — never hang or crash."""

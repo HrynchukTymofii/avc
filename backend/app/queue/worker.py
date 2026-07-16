@@ -40,10 +40,12 @@ class GPUWorker:
         processors: Mapping[JobKind, JobProcessor],
         job_timeout_s: float,
         failure_hook: FailureHook | None = None,
+        timeout_overrides: Mapping[JobKind, float] | None = None,
     ) -> None:
         self._store = store
         self._processors = dict(processors)
         self._job_timeout_s = job_timeout_s
+        self._timeout_overrides = dict(timeout_overrides or {})
         self._failure_hook = failure_hook
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._task: asyncio.Task[None] | None = None
@@ -100,12 +102,13 @@ class GPUWorker:
             # processors may call this from their inference worker thread.
             loop.call_soon_threadsafe(self._apply_progress, job_id, progress, stage)
 
+        timeout_s = self._timeout_overrides.get(job.kind, self._job_timeout_s)
         try:
             processor = self._processors.get(job.kind)
             if processor is None:
                 raise RuntimeError(f"no processor registered for job kind {job.kind.value!r}")
             outputs = await asyncio.wait_for(
-                processor.process(job, report), timeout=self._job_timeout_s
+                processor.process(job, report), timeout=timeout_s
             )
         except asyncio.CancelledError:
             self._store.update(
@@ -119,7 +122,7 @@ class GPUWorker:
             self._store.update(
                 job_id,
                 state=JobState.FAILED,
-                error=f"Job exceeded the {self._job_timeout_s:.0f} second time limit",
+                error=f"Job exceeded the {timeout_s:.0f} second time limit",
                 finished_at=utc_now(),
             )
             log.error("job timed out", extra={"job_id": job_id})

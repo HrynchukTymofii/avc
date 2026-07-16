@@ -177,6 +177,35 @@ class WanPipeline(ManagedPipeline):
         self._t2v.to(device, torch.bfloat16)
         self._device = device
 
+    # ---- style LoRA -------------------------------------------------------------
+
+    _LORA_ADAPTER = "style"
+
+    def set_lora(self, path: Path, scale: float = 1.0) -> None:
+        """Load a trained style adapter onto the shared transformer (the i2v
+        view shares modules, so one load covers both). Call between acquire and
+        generate; pair with clear_lora() in a finally block."""
+        if self._t2v is None:
+            raise RuntimeError("Wan pipeline must be loaded before set_lora()")
+        try:
+            self._t2v.load_lora_weights(str(path), adapter_name=self._LORA_ADAPTER)
+            self._t2v.set_adapters([self._LORA_ADAPTER], adapter_weights=[scale])
+        except Exception as exc:
+            # Make sure a half-applied adapter never leaks into the next job.
+            self.clear_lora()
+            raise RuntimeError(
+                f"failed to apply style LoRA {path.parent.name!r}: {exc}"
+            ) from exc
+        log.info("style LoRA applied", extra={"path": str(path), "scale": scale})
+
+    def clear_lora(self) -> None:
+        if self._t2v is None:
+            return
+        try:
+            self._t2v.unload_lora_weights()
+        except Exception:
+            log.exception("failed to unload style LoRA")
+
     # ---- generation ------------------------------------------------------------
 
     def generate(

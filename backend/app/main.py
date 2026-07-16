@@ -19,6 +19,7 @@ from app.pipelines.wan_pipeline import WanPipeline
 from app.queue.job_store import JobStore
 from app.queue.worker import GPUWorker, JobProcessor
 from app.routes import generation as generation_routes
+from app.routes import loras as loras_routes
 from app.routes import models as models_routes
 from app.routes import status as status_routes
 from app.routes import voices as voices_routes
@@ -26,6 +27,8 @@ from app.schemas import JobKind
 from app.services.broll import BrollProcessor
 from app.services.full_video import FullVideoProcessor
 from app.services.image import ImageProcessor
+from app.services.lora_training import LoraTrainingProcessor
+from app.services.loras import LoraRegistry
 from app.services.talking_head import TalkingHeadProcessor
 from app.services.validation import InputValidationError
 from app.services.voices import VoiceRegistry
@@ -57,13 +60,17 @@ def build_model_manager(settings: Settings) -> ModelManager:
 
 
 def build_processors(
-    settings: Settings, manager: ModelManager, voices: VoiceRegistry
+    settings: Settings,
+    manager: ModelManager,
+    voices: VoiceRegistry,
+    loras: LoraRegistry,
 ) -> dict[JobKind, JobProcessor]:
     return {
         JobKind.TALKING_HEAD: TalkingHeadProcessor(manager, voices, settings),
         JobKind.BROLL: BrollProcessor(manager, settings),
         JobKind.IMAGE: ImageProcessor(manager, settings),
         JobKind.FULL_VIDEO: FullVideoProcessor(manager, voices, settings),
+        JobKind.LORA_TRAINING: LoraTrainingProcessor(manager, loras, settings),
     }
 
 
@@ -85,18 +92,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     voices = VoiceRegistry(settings.assets_dir)
     voices.load()
 
+    loras = LoraRegistry(settings.loras_dir)
     manager = build_model_manager(settings)
     worker = GPUWorker(
         store,
-        build_processors(settings, manager, voices),
+        build_processors(settings, manager, voices, loras),
         job_timeout_s=settings.job_timeout_s,
         failure_hook=manager.after_job_failure,
+        # Training legitimately runs for hours — it gets its own ceiling.
+        timeout_overrides={JobKind.LORA_TRAINING: settings.lora_timeout_s},
     )
     worker.start()
 
     app.state.store = store
     app.state.worker = worker
     app.state.voices = voices
+    app.state.loras = loras
     app.state.model_manager = manager
 
     yield
@@ -119,6 +130,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(voices_routes.router)
     app.include_router(generation_routes.router)
     app.include_router(models_routes.router)
+    app.include_router(loras_routes.router)
 
     @app.exception_handler(InputValidationError)
     async def _invalid_input(request: Request, exc: InputValidationError) -> JSONResponse:

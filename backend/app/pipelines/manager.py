@@ -91,6 +91,18 @@ class ModelManager:
             pipeline.last_used_at = time.monotonic()
             yield pipeline
 
+    async def release_gpu(self) -> None:
+        """Fully unload every pipeline — training jobs need the whole card, and
+        parking weights in system RAM would squeeze the trainer's own host
+        allocations. Reloads afterwards come back from warm page cache."""
+        async with self._lock:
+            for pipeline in self._pipelines.values():
+                if pipeline.state is not PipelineState.UNLOADED:
+                    await self._transition(
+                        pipeline, "unload", PipelineState.UNLOADED, reason="gpu released"
+                    )
+            self._clear_cache()
+
     async def after_job_failure(self, exc: BaseException) -> None:
         """GPU hygiene after any failed job: drop cached allocations, and after an
         OOM offload every resident pipeline so the next job starts clean."""
