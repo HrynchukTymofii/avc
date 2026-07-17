@@ -118,7 +118,7 @@ export default function LoraPage() {
         </p>
       </header>
 
-      <div className="grid gap-8 lg:grid-cols-[5fr_4fr]">
+      <div className="grid gap-8 rounded-3xl border bg-card p-6 sm:p-8 lg:grid-cols-[5fr_4fr]">
         <div
           className="animate-fade-up space-y-5"
           style={{ "--delay": "0.08s" } as React.CSSProperties}

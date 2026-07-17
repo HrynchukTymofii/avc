@@ -1,17 +1,10 @@
 "use client";
 
-import { SlidersHorizontalIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { FileDropzone } from "@/components/file-dropzone";
 import { GenerationFeed } from "@/components/generation-feed";
-import { ModelSelect } from "@/components/model-select";
-import {
-  AdvancedPanel,
-  ComposerControl,
-  Studio,
-  StudioComposer,
-} from "@/components/studio";
+import { ComposerControl, Studio, StudioComposer } from "@/components/studio";
+import { VoiceGuideDialog } from "@/components/voice-guide-dialog";
 import { VoiceSelect } from "@/components/voice-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -19,12 +12,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { submitTalkingHead } from "@/lib/api";
 import { isTerminal, useJobPolling } from "@/lib/use-job-polling";
 
-export default function TalkingHeadPage() {
-  const [avatar, setAvatar] = useState<File | null>(null);
-  const [model, setModel] = useState("");
+// Mirrors the backend's pricing pace: ~900 spoken characters per minute.
+const CHARS_PER_MINUTE = 900;
+
+function estimateDuration(chars: number): string {
+  if (chars === 0) return "0:00";
+  const seconds = Math.round((chars / CHARS_PER_MINUTE) * 60);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function estimateCredits(chars: number): number {
+  return Math.max(1, Math.ceil(chars / CHARS_PER_MINUTE));
+}
+
+export default function VoicePage() {
   const [script, setScript] = useState("");
   const [voice, setVoice] = useState<string>("");
-  const [panelOpen, setPanelOpen] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -41,7 +44,8 @@ export default function TalkingHeadPage() {
     }
   }, [jobId, status]);
 
-  const canSubmit = avatar !== null && script.trim() !== "" && voice !== "";
+  const chars = script.length;
+  const canSubmit = script.trim() !== "" && voice !== "";
 
   const handleSubmit = async () => {
     if (!canSubmit || busy) return;
@@ -49,10 +53,10 @@ export default function TalkingHeadPage() {
     setSubmitError(null);
     try {
       const response = await submitTalkingHead({
-        avatar,
+        avatar: null,
         script,
         voice,
-        model: model || undefined,
+        voiceOnly: true,
       });
       setJobId(response.jobId);
       setScript("");
@@ -70,31 +74,16 @@ export default function TalkingHeadPage() {
         kind="talking_head"
         refreshKey={refreshKey}
         status={status}
-        emptyTitle="Talking Head Studio"
-        emptyHint="Paste your script below, then add a portrait and pick a voice under Avatar & voice — you get a lip-synced video. Roughly 1–3 minutes of processing per minute of script."
+        emptyTitle="Voice Over Studio"
+        emptyHint="Write your narration below — an S2 Pro voice clone reads it exactly as written. Punctuation drives the pacing: commas pause, periods breathe."
       />
-
-      <AdvancedPanel
-        open={panelOpen}
-        onClose={() => setPanelOpen(false)}
-        title="Avatar & voice"
-      >
-        <FileDropzone
-          label="Avatar"
-          hint="PNG / JPEG · clear front-facing portrait"
-          file={avatar}
-          onChange={setAvatar}
-          disabled={busy}
-        />
-        <VoiceSelect value={voice} onChange={setVoice} disabled={busy} />
-      </AdvancedPanel>
 
       <StudioComposer>
         <Textarea
           value={script}
           onChange={(event) => setScript(event.target.value)}
-          placeholder="Paste the words your avatar should speak…"
-          className="max-h-56 min-h-16 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+          placeholder="Write your narration… commas make short pauses, periods end phrases, “…” trails off"
+          className="max-h-64 min-h-20 resize-none border-0 bg-transparent text-[15px] leading-relaxed shadow-none focus-visible:ring-0 dark:bg-transparent"
           disabled={busy}
           onKeyDown={(event) => {
             if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -109,33 +98,18 @@ export default function TalkingHeadPage() {
         )}
         <div className="flex flex-wrap items-center gap-2 border-t pt-2.5">
           <ComposerControl>
-            <ModelSelect
-              kind="talking_head"
-              value={model}
-              onChange={setModel}
-              disabled={busy}
-              compact
-            />
+            <VoiceSelect value={voice} onChange={setVoice} disabled={busy} compact />
           </ComposerControl>
-          <Button
-            size="sm"
-            variant={avatar ? "secondary" : "ghost"}
-            onClick={() => setPanelOpen((open) => !open)}
-          >
-            <SlidersHorizontalIcon className="size-3.5" />
-            {avatar ? "Avatar set" : "Avatar & voice"}
-          </Button>
-          {!avatar && script.trim() !== "" && (
-            <span className="text-xs text-muted-foreground">
-              Add a portrait in “Avatar &amp; voice” to generate.
-            </span>
-          )}
+          <VoiceGuideDialog />
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            ≈ {estimateDuration(chars)} · {estimateCredits(chars)} cr
+          </span>
           <Button
             className="ml-auto font-mono text-xs uppercase tracking-widest"
             onClick={handleSubmit}
             disabled={busy || !canSubmit}
           >
-            {busy ? "Generating…" : "Generate"}
+            {busy ? "Synthesizing…" : "Generate"}
           </Button>
         </div>
       </StudioComposer>

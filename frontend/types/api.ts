@@ -75,6 +75,26 @@ export interface JobListResponse {
   jobs: JobSummary[];
 }
 
+export interface JobDetail {
+  jobId: string;
+  kind: JobKind;
+  status: "queued" | "processing" | "finished" | "failed";
+  label: string;
+  createdAt: string; // ISO 8601
+  cost: number;
+  /** Engine id / prompt / voice the job was created with (absent on old history). */
+  model?: string;
+  prompt?: string;
+  voice?: string;
+  error?: string;
+  video?: string;
+  audio?: string;
+  image?: string;
+  images?: string[];
+  canRegenerate: boolean;
+  canUpscale: boolean;
+}
+
 export interface EngineInfo {
   id: string;
   label: string;

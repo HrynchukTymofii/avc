@@ -1,13 +1,18 @@
 "use client";
 
+import { SlidersHorizontalIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { FileDropzone } from "@/components/file-dropzone";
-import { JobProgress } from "@/components/job-progress";
+import { GenerationFeed } from "@/components/generation-feed";
 import { ModelSelect } from "@/components/model-select";
-import { RecentJobs } from "@/components/recent-jobs";
+import {
+  AdvancedPanel,
+  ComposerControl,
+  Studio,
+  StudioComposer,
+} from "@/components/studio";
 import { StyleSelect } from "@/components/style-select";
-import { VideoPreview } from "@/components/video-preview";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +34,7 @@ export default function BrollPage() {
   const [image, setImage] = useState<File | null>(null);
   const [model, setModel] = useState("");
   const [lora, setLora] = useState("");
+  const [panelOpen, setPanelOpen] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -46,7 +52,7 @@ export default function BrollPage() {
   }, [jobId, status]);
 
   const handleSubmit = async () => {
-    if (!prompt.trim()) return;
+    if (!prompt.trim() || busy) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -55,10 +61,12 @@ export default function BrollPage() {
         duration: Number(duration),
         image,
         model: model || undefined,
-        // styles are trained on (and only apply to) the Wan2.2 5B engine
         lora: model === "wan-5b" ? lora || undefined : undefined,
       });
       setJobId(response.jobId);
+      setPrompt("");
+      setImage(null);
+      setRefreshKey((key) => key + 1);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Submission failed");
     } finally {
@@ -66,124 +74,92 @@ export default function BrollPage() {
     }
   };
 
-  const reset = () => {
-    setJobId(null);
-    setPrompt("");
-    setImage(null);
-  };
-
   return (
-    <div className="space-y-10">
-      <header className="animate-fade-up">
-        <h1 className="text-3xl font-semibold tracking-tight">B-Roll Generator</h1>
-        <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-          Short AI clips for your edit — describe the shot, optionally start from a
-          reference image. A 5-second clip takes roughly 3–8 minutes, so queue a batch
-          and collect the results here later.
-        </p>
-      </header>
+    <Studio>
+      <GenerationFeed
+        kind="broll"
+        refreshKey={refreshKey}
+        status={status}
+        emptyTitle="B-Roll Generator"
+        emptyHint="Describe the shot below — short AI clips for your edit. A 5-second clip takes roughly 3–8 minutes, so queue a batch and collect the results here."
+      />
 
-      <div className="grid gap-8 lg:grid-cols-[5fr_4fr]">
-        <div className="animate-fade-up space-y-5" style={{ "--delay": "0.08s" } as React.CSSProperties}>
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between">
-              <label
-                htmlFor="prompt"
-                className="font-mono text-xs uppercase tracking-widest text-muted-foreground"
-              >
-                Shot description
-              </label>
-              <span className="font-mono text-[11px] tabular-nums text-muted-foreground/70">
-                {prompt.length.toLocaleString()} chars
-              </span>
-            </div>
-            <Textarea
-              id="prompt"
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Slow dolly across a foggy harbour at dawn, fishing boats, cinematic, shallow depth of field…"
-              className="min-h-36 resize-y"
+      <AdvancedPanel open={panelOpen} onClose={() => setPanelOpen(false)} title="Advanced">
+        <FileDropzone
+          label="Reference image (optional)"
+          hint="Animates from this frame"
+          file={image}
+          onChange={setImage}
+          disabled={busy}
+        />
+      </AdvancedPanel>
+
+      <StudioComposer>
+        <Textarea
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+          placeholder="Describe the shot… e.g. slow dolly across a foggy harbour at dawn, cinematic"
+          className="max-h-48 min-h-16 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+          disabled={busy}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              void handleSubmit();
+            }
+          }}
+        />
+        {submitError && (
+          <Alert variant="destructive" className="mb-2">
+            <AlertDescription>{submitError}</AlertDescription>
+          </Alert>
+        )}
+        <div className="flex flex-wrap items-center gap-2 border-t pt-2.5">
+          <ComposerControl>
+            <ModelSelect kind="broll" value={model} onChange={setModel} disabled={busy} compact />
+          </ComposerControl>
+          <ComposerControl>
+            <Select
+              value={duration}
+              onValueChange={(value) => {
+                if (value !== null) setDuration(value);
+              }}
               disabled={busy}
-            />
-          </div>
-
-          <div className="grid gap-5 sm:grid-cols-2">
-            <ModelSelect kind="broll" value={model} onChange={setModel} disabled={busy} />
-            <StyleSelect
-              value={model === "wan-5b" ? lora : ""}
-              onChange={setLora}
-              disabled={busy || model !== "wan-5b"}
-            />
-          </div>
-
-          <div className="grid gap-5 sm:grid-cols-[1fr_2fr]">
-            <div className="space-y-1.5">
-              <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-                Duration
-              </label>
-              <Select
-                value={duration}
-                onValueChange={(value) => {
-                  if (value !== null) setDuration(value)
-                }}
-                disabled={busy}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {DURATIONS.map((seconds) => (
-                    <SelectItem key={seconds} value={String(seconds)}>
-                      {seconds} seconds
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <FileDropzone
-              label="Reference image (optional)"
-              hint="Animates from this frame"
-              file={image}
-              onChange={setImage}
-              disabled={busy}
-            />
-          </div>
-
-          {submitError && (
-            <Alert variant="destructive">
-              <AlertDescription>{submitError}</AlertDescription>
-            </Alert>
+              items={Object.fromEntries(DURATIONS.map((s) => [String(s), `${s} s`]))}
+            >
+              <SelectTrigger size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DURATIONS.map((seconds) => (
+                  <SelectItem key={seconds} value={String(seconds)}>
+                    {seconds} s
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </ComposerControl>
+          {model === "wan-5b" && (
+            <ComposerControl>
+              <StyleSelect value={lora} onChange={setLora} disabled={busy} compact />
+            </ComposerControl>
           )}
-
           <Button
-            size="lg"
-            className="w-full font-mono uppercase tracking-widest"
+            size="sm"
+            variant={image ? "secondary" : "ghost"}
+            onClick={() => setPanelOpen((open) => !open)}
+            title="Reference image"
+          >
+            <SlidersHorizontalIcon className="size-3.5" />
+            {image ? "1 ref" : "Advanced"}
+          </Button>
+          <Button
+            className="ml-auto font-mono text-xs uppercase tracking-widest"
             onClick={handleSubmit}
             disabled={busy || !prompt.trim()}
           >
-            {busy ? "Generating…" : "Generate clip"}
+            {busy ? "Generating…" : "Generate"}
           </Button>
         </div>
-
-        <div className="animate-fade-up space-y-4" style={{ "--delay": "0.16s" } as React.CSSProperties}>
-          <JobProgress status={status} />
-          {status?.status === "finished" && status.video && (
-            <>
-              <VideoPreview video={status.video} />
-              <Button variant="secondary" onClick={reset} className="w-full">
-                New clip
-              </Button>
-            </>
-          )}
-          {!status && !busy && (
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Your generated clip will appear here.
-            </div>
-          )}
-        </div>
-      </div>
-
-      <RecentJobs kind="broll" refreshKey={refreshKey} />
-    </div>
+      </StudioComposer>
+    </Studio>
   );
 }

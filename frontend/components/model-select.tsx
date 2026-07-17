@@ -17,12 +17,14 @@ interface ModelSelectProps {
   value: string;
   onChange: (id: string) => void;
   disabled?: boolean;
+  /** Bare small select for the composer bar — no label, no cost caption. */
+  compact?: boolean;
 }
 
 /** Engine picker fed by /api/models. Preselects ?model= from the URL (used by
  * the nav dropdowns) or the catalog default. Premium engines render disabled
  * until the premium tier exists. */
-export function ModelSelect({ kind, value, onChange, disabled }: ModelSelectProps) {
+export function ModelSelect({ kind, value, onChange, disabled, compact }: ModelSelectProps) {
   const [engines, setEngines] = useState<EngineInfo[] | null>(null);
 
   useEffect(() => {
@@ -48,32 +50,40 @@ export function ModelSelect({ kind, value, onChange, disabled }: ModelSelectProp
 
   const selected = engines?.find((engine) => engine.id === value);
 
+  const select = (
+    <Select
+      value={value}
+      onValueChange={(next) => {
+        if (next !== null) onChange(next);
+      }}
+      disabled={disabled || !engines?.length}
+      // lets <SelectValue> render the engine label instead of the raw id
+      items={Object.fromEntries((engines ?? []).map((engine) => [engine.id, engine.label]))}
+    >
+      <SelectTrigger size={compact ? "sm" : "default"} className={compact ? "max-w-52" : "w-full"}>
+        <SelectValue placeholder={engines === null ? "Loading models…" : "No models"} />
+      </SelectTrigger>
+      <SelectContent>
+        {engines?.map((engine) => (
+          <SelectItem key={engine.id} value={engine.id} disabled={!engine.available}>
+            {engine.label}
+            <span className="ml-2 font-mono text-[10px] uppercase text-muted-foreground">
+              {engine.available ? `${engine.credits} cr` : "premium · soon"}
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
+  if (compact) return select;
+
   return (
     <div className="space-y-1.5">
       <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
         Model
       </label>
-      <Select
-        value={value}
-        onValueChange={(next) => {
-          if (next !== null) onChange(next);
-        }}
-        disabled={disabled || !engines?.length}
-      >
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder={engines === null ? "Loading models…" : "No models"} />
-        </SelectTrigger>
-        <SelectContent>
-          {engines?.map((engine) => (
-            <SelectItem key={engine.id} value={engine.id} disabled={!engine.available}>
-              {engine.label}
-              <span className="ml-2 font-mono text-[10px] uppercase text-muted-foreground">
-                {engine.available ? `${engine.credits} cr` : "premium · soon"}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {select}
       {selected && (
         <p className="text-xs text-muted-foreground/80">Cost: {selected.credits} credits</p>
       )}

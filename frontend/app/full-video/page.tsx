@@ -1,12 +1,18 @@
 "use client";
 
+import { SlidersHorizontalIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { FileDropzone } from "@/components/file-dropzone";
-import { JobProgress } from "@/components/job-progress";
+import { GenerationFeed } from "@/components/generation-feed";
 import { MultiFileDropzone } from "@/components/multi-file-dropzone";
-import { RecentJobs } from "@/components/recent-jobs";
-import { VideoPreview } from "@/components/video-preview";
+import {
+  AdvancedPanel,
+  ComposerControl,
+  Studio,
+  StudioComposer,
+} from "@/components/studio";
+import { VoiceSelect } from "@/components/voice-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,14 +23,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { getVoices, submitFullVideo } from "@/lib/api";
+import { submitFullVideo } from "@/lib/api";
 import { isTerminal, useJobPolling } from "@/lib/use-job-polling";
-import type { Voice } from "@/types/api";
 
 const ORIENTATIONS = [
-  { id: "landscape", label: "Landscape · 1280×704" },
-  { id: "portrait", label: "Portrait · 704×1280" },
-  { id: "square", label: "Square · 960×960" },
+  { id: "landscape", label: "Landscape" },
+  { id: "portrait", label: "Portrait" },
+  { id: "square", label: "Square" },
 ] as const;
 
 const VISUAL_MARKER = /\[\s*(b[ -]?roll|image|clip|on[ -]?camera)\s*(?::([^\]]*))?\]/gi;
@@ -53,8 +58,8 @@ export default function FullVideoPage() {
   const [avatar, setAvatar] = useState<File | null>(null);
   const [clips, setClips] = useState<File[]>([]);
   const [orientation, setOrientation] = useState<string>("landscape");
-  const [voices, setVoices] = useState<Voice[] | null>(null);
   const [voice, setVoice] = useState<string>("");
+  const [panelOpen, setPanelOpen] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -62,15 +67,6 @@ export default function FullVideoPage() {
 
   const status = useJobPolling(jobId);
   const busy = submitting || (jobId !== null && !isTerminal(status));
-
-  useEffect(() => {
-    getVoices()
-      .then((response) => {
-        setVoices(response.voices);
-        if (response.voices.length > 0) setVoice(response.voices[0].id);
-      })
-      .catch(() => setVoices([]));
-  }, []);
 
   const terminalNotified = useRef<string | null>(null);
   useEffect(() => {
@@ -92,8 +88,17 @@ export default function FullVideoPage() {
     (!needsAvatar || avatar !== null) &&
     missingClips.length === 0;
 
+  const blocker =
+    script.trim() === ""
+      ? null
+      : needsAvatar && avatar === null
+        ? "Add an avatar in Setup — the script has on-camera narration."
+        : missingClips.length > 0
+          ? `Upload the referenced clips in Setup: ${missingClips.join(", ")}`
+          : null;
+
   const handleSubmit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || busy) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -105,6 +110,9 @@ export default function FullVideoPage() {
         clips,
       });
       setJobId(response.jobId);
+      setScript("");
+      setClips([]);
+      setRefreshKey((key) => key + 1);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Submission failed");
     } finally {
@@ -112,230 +120,96 @@ export default function FullVideoPage() {
     }
   };
 
-  const reset = () => {
-    setJobId(null);
-    setScript("");
-    setAvatar(null);
-    setClips([]);
-  };
-
   return (
-    <div className="space-y-10">
-      <header className="animate-fade-up">
-        <h1 className="text-3xl font-semibold tracking-tight">Full Video Studio</h1>
-        <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-          One tagged script in, one finished video out: your talking head on camera,
-          AI b-roll, AI stills and your own clips — cut together over a continuous
-          voiceover.
-        </p>
-      </header>
+    <Studio>
+      <GenerationFeed
+        kind="full_video"
+        refreshKey={refreshKey}
+        status={status}
+        emptyTitle="Full Video Studio"
+        emptyHint="One tagged script in, one finished video out: talking head on camera, AI b-roll ([BROLL: …]), AI stills ([IMAGE: …]) and your own clips ([CLIP: file.mp4]) — cut together over a continuous voiceover."
+      />
 
-      <div className="grid gap-8 lg:grid-cols-[5fr_4fr]">
-        <div
-          className="animate-fade-up space-y-5"
-          style={{ "--delay": "0.08s" } as React.CSSProperties}
-        >
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between">
-              <label
-                htmlFor="script"
-                className="font-mono text-xs uppercase tracking-widest text-muted-foreground"
-              >
-                Tagged script
-              </label>
-              <span className="font-mono text-[11px] tabular-nums text-muted-foreground/70">
-                {script.length.toLocaleString()} chars
-              </span>
-            </div>
-            <Textarea
-              id="script"
-              value={script}
-              onChange={(event) => setScript(event.target.value)}
-              placeholder={
-                "Plain text is spoken on camera…\n\n" +
-                "[BROLL: aerial shot of a coastline at dawn]\n" +
-                "…this narration plays over AI footage.\n\n" +
-                "[ONCAMERA]\n…and now back to you."
-              }
-              className="min-h-56 resize-y"
-              disabled={busy}
-            />
-            <details className="rounded-md border bg-card px-3 py-2 text-xs text-muted-foreground">
-              <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-widest">
-                Marker syntax
-              </summary>
-              <ul className="mt-2 space-y-1 font-mono text-[11px] leading-relaxed">
-                <li>
-                  <span className="text-foreground">[BROLL: prompt]</span> — cut to an AI
-                  video clip
-                </li>
-                <li>
-                  <span className="text-foreground">[IMAGE: prompt]</span> — cut to an AI
-                  still with a slow zoom
-                </li>
-                <li>
-                  <span className="text-foreground">[CLIP: filename.mp4]</span> — cut to an
-                  uploaded clip (muted)
-                </li>
-                <li>
-                  <span className="text-foreground">[ONCAMERA]</span> — return to the
-                  talking head
-                </li>
-                <li className="pt-1 text-muted-foreground/80">
-                  Voice tags like [short pause] or [excited] still work — anything
-                  without a colon is spoken direction, not a cut.
-                </li>
-              </ul>
-            </details>
-          </div>
+      <AdvancedPanel open={panelOpen} onClose={() => setPanelOpen(false)} title="Setup">
+        <VoiceSelect value={voice} onChange={setVoice} disabled={busy} />
+        <FileDropzone
+          label="Avatar (on-camera segments)"
+          hint="PNG / JPEG · clear front-facing portrait"
+          file={avatar}
+          onChange={setAvatar}
+          disabled={busy}
+        />
+        <MultiFileDropzone
+          label="Your clips ([CLIP: …])"
+          hint="MP4 / MOV / WebM · matched to the script by file name"
+          accept={["video/mp4", "video/quicktime", "video/webm"]}
+          maxMb={200}
+          files={clips}
+          onChange={setClips}
+          disabled={busy}
+        />
+      </AdvancedPanel>
 
-          <FileDropzone
-            label="Avatar"
-            hint={
-              needsAvatar
-                ? "PNG / JPEG · clear front-facing portrait"
-                : "Not needed — no on-camera segments in the script"
+      <StudioComposer>
+        <Textarea
+          value={script}
+          onChange={(event) => setScript(event.target.value)}
+          placeholder={
+            "Write your tagged script…\nIntro spoken on camera. [BROLL: aerial city at dawn] Voiceover over AI footage. [CLIP: demo.mp4] Voiceover over your clip."
+          }
+          className="max-h-64 min-h-20 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+          disabled={busy}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              void handleSubmit();
             }
-            file={avatar}
-            onChange={setAvatar}
-            disabled={busy || !needsAvatar}
-          />
-
-          <MultiFileDropzone
-            label="Clips"
-            hint="MP4 / MOV / WebM · referenced from the script as [CLIP: name]"
-            accept={["video/mp4", "video/quicktime", "video/webm"]}
-            maxMb={200}
-            files={clips}
-            onChange={setClips}
-            disabled={busy}
-          />
-          {missingClips.length > 0 && (
-            <p className="text-xs text-destructive">
-              The script references clips that are not uploaded yet:{" "}
-              {missingClips.join(", ")}
-            </p>
-          )}
-
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-                Voice
-              </label>
-              <Select
-                value={voice}
-                onValueChange={(value) => {
-                  if (value !== null) setVoice(value);
-                }}
-                disabled={busy || !voices?.length}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue
-                    placeholder={voices === null ? "Loading voices…" : "No voices available"}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {voices?.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                      <span className="ml-2 font-mono text-[10px] uppercase text-muted-foreground">
-                        {item.language}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {voices?.length === 0 && (
-                <p className="text-xs text-destructive">
-                  No voices configured — add reference clips on the server
-                  (backend/assets/voices).
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-                Canvas
-              </label>
-              <Select
-                value={orientation}
-                onValueChange={(value) => {
-                  if (value !== null) setOrientation(value);
-                }}
-                disabled={busy}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ORIENTATIONS.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-muted-foreground/70">
-                Pick portrait for portrait avatars — every segment is cropped to
-                this canvas.
-              </p>
-            </div>
-          </div>
-
-          {submitError && (
-            <Alert variant="destructive">
-              <AlertDescription>{submitError}</AlertDescription>
-            </Alert>
-          )}
-
+          }}
+        />
+        {submitError && (
+          <Alert variant="destructive" className="mb-2">
+            <AlertDescription>{submitError}</AlertDescription>
+          </Alert>
+        )}
+        <div className="flex flex-wrap items-center gap-2 border-t pt-2.5">
+          <ComposerControl>
+            <Select
+              value={orientation}
+              onValueChange={(value) => {
+                if (value !== null) setOrientation(value);
+              }}
+              disabled={busy}
+              items={Object.fromEntries(ORIENTATIONS.map((o) => [o.id, o.label]))}
+            >
+              <SelectTrigger size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ORIENTATIONS.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </ComposerControl>
           <Button
-            size="lg"
-            className="w-full font-mono uppercase tracking-widest"
+            size="sm"
+            variant={avatar || clips.length > 0 ? "secondary" : "ghost"}
+            onClick={() => setPanelOpen((open) => !open)}
+          >
+            <SlidersHorizontalIcon className="size-3.5" />
+            Setup
+          </Button>
+          {blocker && <span className="text-xs text-muted-foreground">{blocker}</span>}
+          <Button
+            className="ml-auto font-mono text-xs uppercase tracking-widest"
             onClick={handleSubmit}
             disabled={busy || !canSubmit}
           >
-            {busy ? "Generating…" : "Generate full video"}
+            {busy ? "Generating…" : "Generate"}
           </Button>
         </div>
-
-        <div
-          className="animate-fade-up space-y-4"
-          style={{ "--delay": "0.16s" } as React.CSSProperties}
-        >
-          <JobProgress status={status} />
-          {status?.status === "processing" && status.audio && (
-            <div className="animate-fade-up rounded-lg border bg-card p-3">
-              <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-                Voiceover ready — visuals still rendering
-              </p>
-              <audio src={status.audio} controls className="w-full" />
-              <Button
-                size="sm"
-                variant="secondary"
-                className="mt-2"
-                render={<a href={status.audio} download />}
-              >
-                Download audio
-              </Button>
-            </div>
-          )}
-          {status?.status === "finished" && (
-            <>
-              {status.video && <VideoPreview video={status.video} audio={status.audio} />}
-              <Button variant="secondary" onClick={reset} className="w-full">
-                New generation
-              </Button>
-            </>
-          )}
-          {!status && !busy && (
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Your assembled video will appear here.
-            </div>
-          )}
-        </div>
-      </div>
-
-      <RecentJobs kind="full_video" refreshKey={refreshKey} />
-    </div>
+      </StudioComposer>
+    </Studio>
   );
 }

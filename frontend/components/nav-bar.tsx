@@ -1,5 +1,6 @@
 "use client";
 
+import { UserRoundIcon } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -26,9 +27,9 @@ interface NavGroup {
 const GROUPS: NavGroup[] = [
   {
     label: "Voice Over",
-    href: "/talking-head?mode=voice",
-    paths: [],
-    items: [{ label: "Narration — S2 Pro voice clone", href: "/talking-head?mode=voice" }],
+    href: "/voice",
+    paths: ["/voice"],
+    items: [{ label: "Narration — S2 Pro voice clone", href: "/voice" }],
   },
   {
     label: "Video",
@@ -61,14 +62,22 @@ const GROUPS: NavGroup[] = [
     paths: ["/lora"],
     items: [{ label: "Style Lab — train a LoRA on your images", href: "/lora" }],
   },
+  {
+    label: "Library",
+    href: "/library",
+    paths: ["/library"],
+    items: [
+      { label: "All generations — play, regenerate, upscale, delete", href: "/library" },
+    ],
+  },
 ];
 
 export function NavBar() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-8 px-4">
+    <header className="sticky top-0 z-40">
+      <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-6 rounded-b-3xl border-x border-b bg-background/70 pl-6 pr-3 shadow-lg shadow-black/30 backdrop-blur-xl">
         <Link href="/talking-head" className="flex items-center gap-2.5">
           <span className="rec-dot" aria-hidden />
           <span className="font-heading text-[15px] font-semibold tracking-tight">
@@ -81,36 +90,39 @@ export function NavBar() {
               <Link
                 href={group.href}
                 className={cn(
-                  "inline-block rounded-md px-3 py-1.5 font-mono text-xs uppercase tracking-widest transition-colors",
+                  "inline-block rounded-full px-3.5 py-1.5 font-mono text-xs uppercase tracking-widest transition-colors",
                   group.paths.includes(pathname)
-                    ? "bg-secondary text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
+                    ? "bg-primary/15 text-foreground"
+                    : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
                 )}
               >
                 {group.label}
               </Link>
-              <div className="invisible absolute left-0 top-full z-50 min-w-64 rounded-md border bg-background p-1 opacity-0 shadow-lg transition-opacity duration-100 group-hover:visible group-hover:opacity-100">
-                {group.items.map((item) =>
-                  item.premium ? (
-                    <div
-                      key={item.label}
-                      className="flex cursor-default items-center justify-between gap-3 rounded px-3 py-2 text-xs text-muted-foreground/60"
-                    >
-                      <span>{item.label}</span>
-                      <span className="shrink-0 rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider">
-                        premium
-                      </span>
-                    </div>
-                  ) : (
-                    <Link
-                      key={item.label}
-                      href={item.href}
-                      className="block rounded px-3 py-2 text-xs text-foreground/90 transition-colors hover:bg-secondary"
-                    >
-                      {item.label}
-                    </Link>
-                  ),
-                )}
+              {/* pt-3 bridges the gap to the floating bar so hover survives the trip */}
+              <div className="invisible absolute left-0 top-full z-50 pt-3 opacity-0 transition-opacity duration-100 group-hover:visible group-hover:opacity-100">
+                <div className="min-w-64 rounded-2xl border bg-popover/90 p-1.5 shadow-xl shadow-black/30 backdrop-blur-xl">
+                  {group.items.map((item) =>
+                    item.premium ? (
+                      <div
+                        key={item.label}
+                        className="flex cursor-default items-center justify-between gap-3 rounded-xl px-3 py-2 text-xs text-muted-foreground/60"
+                      >
+                        <span>{item.label}</span>
+                        <span className="shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider">
+                          premium
+                        </span>
+                      </div>
+                    ) : (
+                      <Link
+                        key={item.label}
+                        href={item.href}
+                        className="block rounded-xl px-3 py-2 text-xs text-foreground/90 transition-colors hover:bg-secondary"
+                      >
+                        {item.label}
+                      </Link>
+                    ),
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -126,20 +138,21 @@ function AccountMenu() {
   const userId = session?.user?.userId;
   const [credits, setCredits] = useState<CreditsResponse | null>(null);
   useEffect(() => {
-    if (!AUTH_ENABLED || !userId) return;
+    // Works without accounts too — the backend reports the local session then.
+    if (AUTH_ENABLED && !userId) return;
     getCredits()
       .then(setCredits)
       .catch(() => setCredits(null));
   }, [userId]);
 
-  if (!AUTH_ENABLED || status === "loading") return null;
+  if (AUTH_ENABLED && status === "loading") return null;
 
-  if (!session?.user) {
+  if (AUTH_ENABLED && !session?.user) {
     return (
       <div className="ml-auto">
         <Link
           href="/sign-in"
-          className="rounded-md px-3 py-1.5 font-mono text-xs uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+          className="inline-block rounded-full bg-primary/15 px-4 py-1.5 font-mono text-xs uppercase tracking-widest text-foreground transition-colors hover:bg-primary/25"
         >
           Sign in
         </Link>
@@ -147,32 +160,54 @@ function AccountMenu() {
     );
   }
 
+  const name = session?.user?.name || session?.user?.email || "Local session";
+  const creditsLabel =
+    credits === null
+      ? "…"
+      : credits.unlimited
+        ? "unlimited"
+        : `${credits.balance} credits`;
+
   return (
     <div className="group relative ml-auto">
       <button
         type="button"
-        className="flex items-center gap-2 rounded-md px-3 py-1.5 font-mono text-xs uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+        className="flex items-center gap-2.5 rounded-full border bg-secondary/60 py-1 pl-1 pr-4 transition-colors hover:bg-secondary"
       >
-        <span className="max-w-32 truncate">{session.user.name || session.user.email}</span>
+        <span className="flex size-7 items-center justify-center rounded-full bg-linear-to-b from-primary to-[oklch(0.52_0.18_262)]">
+          <UserRoundIcon className="size-3.5 text-primary-foreground" />
+        </span>
+        <span className="hidden text-left sm:block">
+          <span className="block max-w-32 truncate text-xs text-foreground/90">{name}</span>
+          <span className="block font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+            {creditsLabel}
+          </span>
+        </span>
       </button>
-      <div className="invisible absolute right-0 top-full z-50 min-w-44 rounded-md border bg-background p-1 opacity-0 shadow-lg transition-opacity duration-100 group-hover:visible group-hover:opacity-100">
-        <div className="px-3 py-2">
-          <p className="truncate text-xs text-foreground/90">{session.user.email}</p>
-          <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            {credits === null
-              ? "…"
-              : credits.unlimited
-                ? "admin · unlimited"
-                : `${credits.balance} credits`}
-          </p>
+      <div className="invisible absolute right-0 top-full z-50 pt-3 opacity-0 transition-opacity duration-100 group-hover:visible group-hover:opacity-100">
+        <div className="min-w-48 rounded-2xl border bg-popover/90 p-1.5 shadow-xl shadow-black/30 backdrop-blur-xl">
+          <div className="px-3 py-2">
+            <p className="truncate text-xs text-foreground/90">{name}</p>
+            <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              {creditsLabel}
+            </p>
+          </div>
+          <Link
+            href="/library"
+            className="block rounded-xl px-3 py-2 text-xs text-foreground/90 transition-colors hover:bg-secondary"
+          >
+            My library
+          </Link>
+          {AUTH_ENABLED && session?.user && (
+            <button
+              type="button"
+              onClick={() => signOut({ callbackUrl: "/sign-in" })}
+              className="block w-full rounded-xl px-3 py-2 text-left text-xs text-foreground/90 transition-colors hover:bg-secondary"
+            >
+              Sign out
+            </button>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={() => signOut({ callbackUrl: "/sign-in" })}
-          className="block w-full rounded px-3 py-2 text-left text-xs text-foreground/90 transition-colors hover:bg-secondary"
-        >
-          Sign out
-        </button>
       </div>
     </div>
   );

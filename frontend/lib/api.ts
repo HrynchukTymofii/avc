@@ -7,6 +7,7 @@
 import type {
   CreditsResponse,
   JobCreatedResponse,
+  JobDetail,
   JobKind,
   JobListResponse,
   JobStatus,
@@ -131,12 +132,19 @@ export async function submitImage(input: {
 }
 
 export async function submitUpscale(input: {
-  file: File;
+  /** Either a local upload… */
+  file?: File;
+  /** …or a finished job whose output is upscaled straight on the server. */
+  sourceJob?: string;
+  /** Outputs key for multi-image source jobs ("image", "image_2", …). */
+  source?: string;
   model?: string;
   scale?: number;
 }): Promise<JobCreatedResponse> {
   const form = new FormData();
-  form.append("file", input.file);
+  if (input.file) form.append("file", input.file);
+  if (input.sourceJob) form.append("source_job", input.sourceJob);
+  if (input.source) form.append("source", input.source);
   if (input.model) form.append("model", input.model);
   if (input.scale) form.append("scale", String(input.scale));
   return handle(await apiFetch("/api/upscale", { method: "POST", body: form }));
@@ -202,6 +210,34 @@ export async function getJobs(options?: {
   if (options?.limit) params.set("limit", String(options.limit));
   const query = params.size > 0 ? `?${params}` : "";
   return handle(await apiFetch(`/api/jobs${query}`));
+}
+
+export async function getJobDetail(jobId: string): Promise<JobDetail> {
+  return handle(await apiFetch(`/api/jobs/${encodeURIComponent(jobId)}`));
+}
+
+export async function regenerateJob(jobId: string): Promise<JobCreatedResponse> {
+  return handle(
+    await apiFetch(`/api/jobs/${encodeURIComponent(jobId)}/regenerate`, {
+      method: "POST",
+    }),
+  );
+}
+
+export async function deleteJob(jobId: string): Promise<void> {
+  const response = await apiFetch(`/api/jobs/${encodeURIComponent(jobId)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    let detail = `Delete failed (${response.status})`;
+    try {
+      const body = (await response.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      // non-JSON error body; keep the generic message
+    }
+    throw new ApiRequestError(detail, response.status);
+  }
 }
 
 export async function getVoices(): Promise<VoicesResponse> {

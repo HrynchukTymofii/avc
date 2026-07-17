@@ -39,7 +39,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <Providers>
           <NavBar />
-          <main className="w-full max-w-6xl flex-1 mx-auto px-4 py-10">{children}</main>
+          <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-6 pt-8">{children}</main>
           <footer className="border-t py-4">
             <p className="mx-auto max-w-6xl px-4 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
               One GPU &middot; one job at a time &middot; queued jobs run in order

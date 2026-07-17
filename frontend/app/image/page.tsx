@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { JobProgress } from "@/components/job-progress";
+import { GenerationFeed } from "@/components/generation-feed";
 import { ModelSelect } from "@/components/model-select";
-import { RecentJobs } from "@/components/recent-jobs";
+import { ComposerControl, Studio, StudioComposer } from "@/components/studio";
 import { StyleSelect } from "@/components/style-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -20,9 +20,9 @@ import { submitImage } from "@/lib/api";
 import { isTerminal, useJobPolling } from "@/lib/use-job-polling";
 
 const ORIENTATIONS = [
-  { value: "landscape", label: "Landscape · 1280×704" },
-  { value: "portrait", label: "Portrait · 704×1280" },
-  { value: "square", label: "Square · 960×960" },
+  { value: "landscape", label: "Landscape" },
+  { value: "portrait", label: "Portrait" },
+  { value: "square", label: "Square" },
 ] as const;
 
 const COUNTS = ["1", "2", "3", "4"] as const;
@@ -50,7 +50,7 @@ export default function ImagePage() {
   }, [jobId, status]);
 
   const handleSubmit = async () => {
-    if (!prompt.trim()) return;
+    if (!prompt.trim() || busy) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -63,6 +63,8 @@ export default function ImagePage() {
         lora: model === "wan-5b" ? lora || undefined : undefined,
       });
       setJobId(response.jobId);
+      setPrompt("");
+      setRefreshKey((key) => key + 1); // show the queued job in the feed
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Submission failed");
     } finally {
@@ -70,151 +72,96 @@ export default function ImagePage() {
     }
   };
 
-  const reset = () => {
-    setJobId(null);
-    setPrompt("");
-  };
-
   return (
-    <div className="space-y-10">
-      <header className="animate-fade-up">
-        <h1 className="text-3xl font-semibold tracking-tight">Image Generator</h1>
-        <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-          Still images from the same model that renders your B-roll — describe the
-          scene and pick a format. An image takes under a minute once the model is
-          warm (a few minutes on the first run).
-        </p>
-      </header>
+    <Studio>
+      <GenerationFeed
+        kind="image"
+        refreshKey={refreshKey}
+        status={status}
+        emptyTitle="Image Generator"
+        emptyHint="Describe the scene below and pick a format — your images appear here, newest at the bottom. Under a minute per image once the model is warm."
+      />
 
-      <div className="grid gap-8 lg:grid-cols-[5fr_4fr]">
-        <div className="animate-fade-up space-y-5" style={{ "--delay": "0.08s" } as React.CSSProperties}>
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between">
-              <label
-                htmlFor="prompt"
-                className="font-mono text-xs uppercase tracking-widest text-muted-foreground"
-              >
-                Scene description
-              </label>
-              <span className="font-mono text-[11px] tabular-nums text-muted-foreground/70">
-                {prompt.length.toLocaleString()} chars
-              </span>
-            </div>
-            <Textarea
-              id="prompt"
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder="A cozy study with warm lamplight, bookshelves, a steaming cup of tea on a wooden desk, photorealistic…"
-              className="min-h-36 resize-y"
+      <StudioComposer>
+        <Textarea
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+          placeholder="Describe the image… e.g. a cozy study with warm lamplight, bookshelves, photorealistic"
+          className="max-h-48 min-h-16 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+          disabled={busy}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              void handleSubmit();
+            }
+          }}
+        />
+        {submitError && (
+          <Alert variant="destructive" className="mb-2">
+            <AlertDescription>{submitError}</AlertDescription>
+          </Alert>
+        )}
+        <div className="flex flex-wrap items-center gap-2 border-t pt-2.5">
+          <ComposerControl>
+            <ModelSelect kind="image" value={model} onChange={setModel} disabled={busy} compact />
+          </ComposerControl>
+          <ComposerControl>
+            <Select
+              value={orientation}
+              onValueChange={(value) => {
+                if (value !== null) setOrientation(value);
+              }}
               disabled={busy}
-            />
-          </div>
-
-          <div className="grid gap-5 sm:grid-cols-2">
-            <ModelSelect kind="image" value={model} onChange={setModel} disabled={busy} />
-            <StyleSelect
-              value={model === "wan-5b" ? lora : ""}
-              onChange={setLora}
-              disabled={busy || model !== "wan-5b"}
-            />
-            <div className="space-y-1.5">
-              <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-                Format
-              </label>
-              <Select
-                value={orientation}
-                onValueChange={(value) => {
-                  if (value !== null) setOrientation(value);
-                }}
-                disabled={busy}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ORIENTATIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-                Variations
-              </label>
-              <Select
-                value={count}
-                onValueChange={(value) => {
-                  if (value !== null) setCount(value);
-                }}
-                disabled={busy}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {COUNTS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option === "1" ? "1 image" : `${option} images`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {submitError && (
-            <Alert variant="destructive">
-              <AlertDescription>{submitError}</AlertDescription>
-            </Alert>
+              items={Object.fromEntries(ORIENTATIONS.map((o) => [o.value, o.label]))}
+            >
+              <SelectTrigger size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ORIENTATIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </ComposerControl>
+          <ComposerControl>
+            <Select
+              value={count}
+              onValueChange={(value) => {
+                if (value !== null) setCount(value);
+              }}
+              disabled={busy}
+              items={Object.fromEntries(
+                COUNTS.map((c) => [c, c === "1" ? "1 image" : `${c} images`]),
+              )}
+            >
+              <SelectTrigger size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COUNTS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option === "1" ? "1 image" : `${option} images`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </ComposerControl>
+          {model === "wan-5b" && (
+            <ComposerControl>
+              <StyleSelect value={lora} onChange={setLora} disabled={busy} compact />
+            </ComposerControl>
           )}
-
           <Button
-            size="lg"
-            className="w-full font-mono uppercase tracking-widest"
+            className="ml-auto font-mono text-xs uppercase tracking-widest"
             onClick={handleSubmit}
             disabled={busy || !prompt.trim()}
           >
-            {busy ? "Generating…" : "Generate image"}
+            {busy ? "Generating…" : "Generate"}
           </Button>
         </div>
-
-        <div className="animate-fade-up space-y-4" style={{ "--delay": "0.16s" } as React.CSSProperties}>
-          <JobProgress status={status} />
-          {status?.status === "finished" && status.image && (
-            <>
-              {(status.images ?? [status.image]).map((url, index) => (
-                <div key={url} className="overflow-hidden rounded-lg border bg-black">
-                  <a href={url} target="_blank" rel="noreferrer">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={url} alt={`Generated image ${index + 1}`} className="w-full" />
-                  </a>
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      Variation {index + 1}
-                    </span>
-                    <Button size="sm" variant="secondary" render={<a href={url} download />}>
-                      Download
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              <Button variant="secondary" onClick={reset} className="w-full">
-                New image
-              </Button>
-            </>
-          )}
-          {!status && !busy && (
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Your generated image will appear here.
-            </div>
-          )}
-        </div>
-      </div>
-
-      <RecentJobs kind="image" refreshKey={refreshKey} />
-    </div>
+      </StudioComposer>
+    </Studio>
   );
 }

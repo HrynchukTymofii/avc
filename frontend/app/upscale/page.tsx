@@ -2,11 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { JobProgress } from "@/components/job-progress";
+import { GenerationFeed } from "@/components/generation-feed";
 import { MediaDropzone } from "@/components/media-dropzone";
 import { ModelSelect } from "@/components/model-select";
-import { RecentJobs } from "@/components/recent-jobs";
-import { VideoPreview } from "@/components/video-preview";
+import { ComposerControl, Studio, StudioComposer } from "@/components/studio";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,7 +44,7 @@ export default function UpscalePage() {
   }, [jobId, status]);
 
   const handleSubmit = async () => {
-    if (!file) return;
+    if (!file || busy) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -55,6 +54,8 @@ export default function UpscalePage() {
         scale: Number(scale),
       });
       setJobId(response.jobId);
+      setFile(null);
+      setRefreshKey((key) => key + 1);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Submission failed");
     } finally {
@@ -62,124 +63,65 @@ export default function UpscalePage() {
     }
   };
 
-  const reset = () => {
-    setJobId(null);
-    setFile(null);
-  };
-
   return (
-    <div className="space-y-10">
-      <header className="animate-fade-up">
-        <h1 className="text-3xl font-semibold tracking-tight">Upscaler</h1>
-        <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-          Sharpen and enlarge images or short videos with Real-ESRGAN. Pick the
-          drawn/anime model for stylized art and generated characters — the photo
-          model for everything else. Images finish in seconds; videos are upscaled
-          frame by frame (roughly a minute of processing per second of footage).
-        </p>
-      </header>
+    <Studio>
+      <GenerationFeed
+        kind="upscale"
+        refreshKey={refreshKey}
+        status={status}
+        emptyTitle="Upscaler"
+        emptyHint="Drop an image or a short video below and enlarge it with Real-ESRGAN. Tip: you can also upscale any generation straight from the Library — no re-upload."
+      />
 
-      <div className="grid gap-8 lg:grid-cols-[5fr_4fr]">
-        <div
-          className="animate-fade-up space-y-5"
-          style={{ "--delay": "0.08s" } as React.CSSProperties}
-        >
-          <MediaDropzone
-            label="Image or video"
-            hint="PNG/JPEG ≤ 20 MB · MP4/MOV/WebM ≤ 200 MB, ≤ 2 min"
-            file={file}
-            onChange={setFile}
-            maxImageMb={20}
-            maxVideoMb={200}
-            disabled={busy}
-          />
-
-          <div className="grid gap-5 sm:grid-cols-2">
-            <ModelSelect kind="upscale" value={model} onChange={setModel} disabled={busy} />
-            <div className="space-y-1.5">
-              <label className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-                Scale
-              </label>
-              <Select
-                value={scale}
-                onValueChange={(value) => {
-                  if (value !== null) setScale(value);
-                }}
-                disabled={busy}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SCALES.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {submitError && (
-            <Alert variant="destructive">
-              <AlertDescription>{submitError}</AlertDescription>
-            </Alert>
-          )}
-
+      <StudioComposer>
+        <MediaDropzone
+          label="Image or video"
+          hint="PNG/JPEG ≤ 20 MB · MP4/MOV/WebM ≤ 200 MB, ≤ 2 min"
+          file={file}
+          onChange={setFile}
+          maxImageMb={20}
+          maxVideoMb={200}
+          disabled={busy}
+        />
+        {submitError && (
+          <Alert variant="destructive" className="my-2">
+            <AlertDescription>{submitError}</AlertDescription>
+          </Alert>
+        )}
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-2.5">
+          <ComposerControl>
+            <ModelSelect kind="upscale" value={model} onChange={setModel} disabled={busy} compact />
+          </ComposerControl>
+          <ComposerControl>
+            <Select
+              value={scale}
+              onValueChange={(value) => {
+                if (value !== null) setScale(value);
+              }}
+              disabled={busy}
+              items={Object.fromEntries(SCALES.map((s) => [s.value, s.label]))}
+            >
+              <SelectTrigger size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SCALES.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </ComposerControl>
           <Button
-            size="lg"
-            className="w-full font-mono uppercase tracking-widest"
+            className="ml-auto font-mono text-xs uppercase tracking-widest"
             onClick={handleSubmit}
             disabled={busy || !file}
           >
             {busy ? "Upscaling…" : "Upscale"}
           </Button>
         </div>
-
-        <div
-          className="animate-fade-up space-y-4"
-          style={{ "--delay": "0.16s" } as React.CSSProperties}
-        >
-          <JobProgress status={status} />
-          {status?.status === "finished" && status.video && (
-            <>
-              <VideoPreview video={status.video} />
-              <Button variant="secondary" onClick={reset} className="w-full">
-                Upscale another
-              </Button>
-            </>
-          )}
-          {status?.status === "finished" && status.image && (
-            <>
-              <div className="overflow-hidden rounded-lg border bg-black">
-                <a href={status.image} target="_blank" rel="noreferrer">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={status.image} alt="Upscaled image" className="w-full" />
-                </a>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    Upscaled {scale}×
-                  </span>
-                  <Button size="sm" variant="secondary" render={<a href={status.image} download />}>
-                    Download
-                  </Button>
-                </div>
-              </div>
-              <Button variant="secondary" onClick={reset} className="w-full">
-                Upscale another
-              </Button>
-            </>
-          )}
-          {!status && !busy && (
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Your upscaled file will appear here.
-            </div>
-          )}
-        </div>
-      </div>
-
-      <RecentJobs kind="upscale" refreshKey={refreshKey} />
-    </div>
+      </StudioComposer>
+    </Studio>
   );
 }
