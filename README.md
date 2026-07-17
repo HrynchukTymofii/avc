@@ -409,7 +409,7 @@ ssh -L 3000:localhost:3000 ubuntu@<elastic-ip>
 
 With `AUTH_ENABLED=false` (default) the studio is single-user behind nginx
 basic auth, as before. To turn on real accounts (email/password + Google,
-per-user job history, admin approval gate):
+per-user job history, credit-metered generation):
 
 1. **Neon database** — create a project at neon.tech, copy the connection
    string (keep `?sslmode=require`).
@@ -446,15 +446,25 @@ per-user job history, admin approval gate):
    docker compose build frontend && docker compose up -d
    ```
 
-6. **Approve yourself** — sign up in the UI, then in the Neon SQL editor:
+6. **Make yourself admin** — sign up in the UI, then in the Neon SQL editor:
 
    ```sql
-   UPDATE "User" SET approved = true, role = 'admin' WHERE email = 'you@example.com';
+   UPDATE "User" SET role = 'admin' WHERE email = 'you@example.com';
    ```
 
-   New sign-ups start unapproved: they can log in and browse but job
-   submission returns 403 until you set `approved = true` for them. Admins
-   (`role = 'admin'`) see every job; users see their own.
+   New sign-ups start with **100 credits** and can generate right away — no
+   approval step. The backend prices each job (matching the per-model hints
+   shown in the UI, e.g. 8/clip for b-roll — see
+   `backend/app/services/credits.py`) and returns 403 once the balance runs
+   out; failed jobs are not charged. To top an account up, raise its
+   allowance:
+
+   ```sql
+   UPDATE "User" SET credits = 500 WHERE email = 'them@example.com';
+   ```
+
+   Admins (`role = 'admin'`) generate for free and see every job; users see
+   their own.
 
 Once you've verified login works, you can remove nginx basic auth (delete the
 `auth_basic` lines from the site config and `sudo systemctl reload nginx`) —

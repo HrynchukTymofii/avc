@@ -50,7 +50,7 @@ export default function SignUpPage() {
       <header className="animate-fade-up text-center">
         <h1 className="text-3xl font-semibold tracking-tight">Create account</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          New accounts need admin approval before they can generate.
+          New accounts start with 100 free credits.
         </p>
       </header>
 

@@ -125,6 +125,9 @@ class Job:
     # Owner (AuthUser.id). "local" = the implicit user when auth is disabled,
     # and the owner of jobs created before accounts existed.
     user_id: str = "local"
+    # Credits charged at submission (services.credits prices); 0 for jobs that
+    # predate the credit system. Failed jobs are not counted as spend.
+    cost: int = 0
     state: JobState = JobState.QUEUED
     progress: int = 0
     stage: str | None = None

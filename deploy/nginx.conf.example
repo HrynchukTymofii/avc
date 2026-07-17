@@ -34,6 +34,15 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    # Also a Next route: mints the Bearer JWT the browser sends to the backend.
+    # Without this carve-out every backend call fails with 401 "Not signed in".
+    location = /api/backend-token {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     # API + generated files go straight to the backend, skipping the Next hop.
     location /api/ {
         proxy_pass http://127.0.0.1:8000;

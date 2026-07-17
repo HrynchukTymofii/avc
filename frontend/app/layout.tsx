@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Bricolage_Grotesque, Geist, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
-import { ApprovalBanner } from "@/components/approval-banner";
 import { NavBar } from "@/components/nav-bar";
 import { Providers } from "@/components/providers";
 
@@ -40,7 +39,6 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <Providers>
           <NavBar />
-          <ApprovalBanner />
           <main className="w-full max-w-6xl flex-1 mx-auto px-4 py-10">{children}</main>
           <footer className="border-t py-4">
             <p className="mx-auto max-w-6xl px-4 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">

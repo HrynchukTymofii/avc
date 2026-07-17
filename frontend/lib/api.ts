@@ -5,6 +5,7 @@
  */
 
 import type {
+  CreditsResponse,
   JobCreatedResponse,
   JobKind,
   JobListResponse,
@@ -205,4 +206,8 @@ export async function getJobs(options?: {
 
 export async function getVoices(): Promise<VoicesResponse> {
   return handle(await apiFetch("/api/voices"));
+}
+
+export async function getCredits(): Promise<CreditsResponse> {
+  return handle(await apiFetch("/api/credits"));
 }

@@ -110,6 +110,13 @@ export interface VoicesResponse {
   voices: Voice[];
 }
 
+export interface CreditsResponse {
+  allowance: number;
+  spent: number;
+  balance: number;
+  unlimited: boolean;
+}
+
 export interface ApiError {
   detail: string;
 }

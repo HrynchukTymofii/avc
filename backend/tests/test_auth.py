@@ -1,4 +1,4 @@
-"""Bearer-token auth: token verification, the approval gate, and owner scoping.
+"""Bearer-token auth: token verification, the credits gate, and owner scoping.
 
 The rest of the suite runs with AUTH_ENABLED=false (the default) and is
 untouched by auth; these tests build a client with auth enabled.
@@ -22,7 +22,7 @@ SECRET = "test-secret-0123456789abcdef0123456789abcdef"
 def make_token(
     user_id: str = "user-1",
     *,
-    approved: bool = True,
+    credits: int = 100,
     role: str = "user",
     expires_in: int = 600,
     secret: str = SECRET,
@@ -32,7 +32,7 @@ def make_token(
             "sub": user_id,
             "email": f"{user_id}@example.com",
             "name": user_id,
-            "approved": approved,
+            "credits": credits,
             "role": role,
             "iat": int(time.time()),
             "exp": int(time.time()) + expires_in,
@@ -103,18 +103,50 @@ def test_valid_token_is_accepted(client: TestClient) -> None:
     assert "jobId" in response.json()
 
 
-# ---- approval gate --------------------------------------------------------------------
+# ---- credits gate ---------------------------------------------------------------------
 
 
-def test_unapproved_user_cannot_submit_but_can_browse(client: TestClient) -> None:
-    headers = bearer(make_token(approved=False))
+def test_out_of_credits_cannot_submit_but_can_browse(client: TestClient) -> None:
+    headers = bearer(make_token(credits=0))
     response = submit_image(client, headers)
     assert response.status_code == 403
-    assert "awaiting approval" in response.json()["detail"]
+    assert "Not enough credits" in response.json()["detail"]
 
-    # read-only endpoints still work — the UI can render and show the banner
+    # read-only endpoints still work — the UI can render and show the balance
     assert client.get("/api/models", headers=headers).status_code == 200
     assert client.get("/api/jobs", headers=headers).status_code == 200
+
+
+def test_credits_endpoint_reports_balance(client: TestClient) -> None:
+    headers = bearer(make_token("fresh-user", credits=100))
+    assert client.get("/api/credits", headers=headers).json() == {
+        "allowance": 100,
+        "spent": 0,
+        "balance": 100,
+        "unlimited": False,
+    }
+
+
+def test_admin_generates_for_free(client: TestClient) -> None:
+    headers = bearer(make_token("boss", credits=0, role="admin"))
+    assert submit_image(client, headers).status_code == 200
+    assert client.get("/api/credits", headers=headers).json()["unlimited"] is True
+
+
+def test_credits_spent_counts_non_failed_jobs(tmp_path: Path) -> None:
+    from app.queue.job import Job, JobState
+    from app.queue.job_store import JobStore
+    from app.schemas import JobKind
+
+    store = JobStore(tmp_path)
+    store.add(Job(id="a", kind=JobKind.IMAGE, params=None, user_id="u", cost=3))
+    store.add(Job(id="b", kind=JobKind.BROLL, params=None, user_id="u", cost=8))
+    store.add(Job(id="c", kind=JobKind.IMAGE, params=None, user_id="other", cost=5))
+    assert store.credits_spent("u") == 11
+
+    # failed jobs are refunded by not being counted
+    store.update("b", state=JobState.FAILED)
+    assert store.credits_spent("u") == 3
 
 
 # ---- owner scoping ---------------------------------------------------------------------

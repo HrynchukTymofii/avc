@@ -8,9 +8,9 @@ Bearer <token>`; this module verifies it and exposes the caller as AuthUser.
 With AUTH_ENABLED=false (the default — local dev and tests) everything runs
 as one implicit, pre-approved local user and no header is required.
 
-Approval gate: new accounts have approved=false until flipped in the users
-table — they can sign in and browse, but job submission requires approval
-(GPU time costs real money; credits don't exist yet).
+Credits: every account has an allowance (User.credits, default 100 for new
+sign-ups) carried in the token; job prices and the balance gate live in
+services.credits (GPU time costs real money).
 """
 
 from __future__ import annotations
@@ -29,13 +29,14 @@ class AuthUser:
     id: str
     email: str | None = None
     name: str | None = None
-    approved: bool = False
+    # Total credit allowance (spend is derived from job history, not stored here).
+    credits: int = 0
     role: str = "user"
 
 
 # The implicit single user when AUTH_ENABLED=false; also the owner of jobs
 # created before accounts existed (Job.user_id defaults to "local").
-LOCAL_USER = AuthUser(id="local", approved=True, role="admin")
+LOCAL_USER = AuthUser(id="local", role="admin")
 
 
 def decode_token(token: str, secret: str) -> AuthUser:
@@ -52,7 +53,7 @@ def decode_token(token: str, secret: str) -> AuthUser:
         id=str(payload["sub"]),
         email=payload.get("email"),
         name=payload.get("name"),
-        approved=bool(payload.get("approved", False)),
+        credits=int(payload.get("credits", 0)),
         role=str(payload.get("role", "user")),
     )
 
@@ -79,15 +80,6 @@ async def get_current_user(
         return decode_token(token, settings.api_jwt_secret)
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired session token")
-
-
-def require_approved(user: AuthUser) -> None:
-    """Generation costs GPU time — only approved accounts may submit jobs."""
-    if not user.approved:
-        raise HTTPException(
-            status_code=403,
-            detail="Your account is awaiting approval — ask the admin to enable it",
-        )
 
 
 def can_view(user: AuthUser, owner_id: str) -> bool:

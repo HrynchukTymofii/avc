@@ -27,6 +27,15 @@ class ErrorResponse(BaseModel):
     detail: str
 
 
+class CreditsResponse(BaseModel):
+    # allowance = User.credits from the account DB; spent = non-failed job
+    # costs; balance = what's left to spend. Admins report unlimited=True.
+    allowance: int
+    spent: int
+    balance: int
+    unlimited: bool = False
+
+
 # ---- request text fields (from multipart forms) --------------------------------
 # Length limits come from Settings and are enforced in services.validation, so the
 # models here only pin the shape and the fixed product constraints.

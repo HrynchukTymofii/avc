@@ -53,6 +53,15 @@ class JobStore:
             jobs = (j for j in jobs if j.user_id == user_id)
         return sorted(jobs, key=lambda j: j.created_at, reverse=True)[:limit]
 
+    def credits_spent(self, user_id: str) -> int:
+        """Credits a user has consumed: the stored cost of every non-failed
+        job. Failed jobs don't count, so refunds happen by themselves."""
+        return sum(
+            job.cost
+            for job in self._jobs.values()
+            if job.user_id == user_id and job.state is not JobState.FAILED
+        )
+
     def queued_position(self, job_id: str) -> int | None:
         """1-based index among QUEUED jobs ordered by creation time; None if the
         job is not queued. Computed at read time so positions are always
@@ -120,6 +129,7 @@ def _snapshot_from_job(job: Job) -> dict[str, Any]:
         "state": job.state.value,
         "label": job.label,
         "user_id": job.user_id,
+        "cost": job.cost,
         "progress": job.progress,
         "stage": job.stage,
         "error": job.error,
@@ -143,6 +153,7 @@ def _job_from_snapshot(data: dict[str, Any]) -> Job:
         params=None,
         label=str(data.get("label", "")),
         user_id=str(data.get("user_id", "local")),
+        cost=int(data.get("cost", 0)),
         state=JobState(data["state"]),
         progress=int(data.get("progress", 0)),
         stage=data.get("stage"),

@@ -26,7 +26,7 @@ export async function GET() {
   const token = await new SignJWT({
     email: session.user.email,
     name: session.user.name,
-    approved: session.user.approved,
+    credits: session.user.credits,
     role: session.user.role,
   })
     .setProtectedHeader({ alg: "HS256" })

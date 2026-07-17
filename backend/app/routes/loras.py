@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import get_loras
 from app.schemas import ErrorResponse, LorasResponse, LoraStyle
-from app.services.auth import AuthUser, get_current_user, require_approved
+from app.services.auth import AuthUser, get_current_user
 from app.services.loras import LoraRegistry
 
 router = APIRouter(prefix="/api", tags=["loras"])
@@ -41,6 +41,11 @@ async def delete_lora(
     registry: Annotated[LoraRegistry, Depends(get_loras)],
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> None:
-    require_approved(user)
+    # Styles are a shared registry with no per-user ownership, so deleting a
+    # trained style (a 100-credit run) is admin-only.
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=403, detail="Only an admin can delete a trained style"
+        )
     if not registry.delete(lora_id):
         raise HTTPException(status_code=404, detail="Style not found")

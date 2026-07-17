@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 
 /** NextAuth v4, JWT session strategy (no session table). Google sign-ins are
  * upserted into the users table by the signIn callback; the jwt callback keeps
- * userId/approved/role fresh from the DB on every token refresh. */
+ * userId/credits/role fresh from the DB on every token refresh. */
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
@@ -96,7 +96,7 @@ export const authOptions: NextAuthOptions = {
       });
       if (dbUser) {
         token.userId = dbUser.id;
-        token.approved = dbUser.approved;
+        token.credits = dbUser.credits;
         token.role = dbUser.role;
         token.name = dbUser.name ?? token.name;
         token.picture = dbUser.image ?? token.picture;
@@ -107,7 +107,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user.userId = token.userId as string;
-        session.user.approved = Boolean(token.approved);
+        session.user.credits = Number(token.credits ?? 0);
         session.user.role = (token.role as string) ?? "user";
       }
       return session;

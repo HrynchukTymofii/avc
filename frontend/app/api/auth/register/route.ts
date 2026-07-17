@@ -5,8 +5,8 @@ import { db } from "@/lib/db";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Email/password registration. New accounts start unapproved — they can sign
- * in and browse, but job submission is blocked until an admin flips the flag. */
+/** Email/password registration. New accounts start with 100 credits
+ * (User.credits default); the backend prices jobs against that allowance. */
 export async function POST(request: Request) {
   let body: { name?: string; email?: string; password?: string };
   try {

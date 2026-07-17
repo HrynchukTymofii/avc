@@ -18,9 +18,10 @@ model User {
   image         String?
   // bcrypt hash; null for OAuth-only accounts
   password      String?
-  // Gate: unapproved accounts can sign in and browse but not submit jobs
-  // (flip in the Neon console until an admin UI exists).
-  approved      Boolean   @default(false)
+  // Total credit allowance. Jobs are priced by the backend and spend is
+  // tracked there from job history; raise this in the Neon console to top an
+  // account up. New accounts start with 100.
+  credits       Int       @default(100)
   role          String    @default("user")
   createdAt     DateTime  @default(now())
 

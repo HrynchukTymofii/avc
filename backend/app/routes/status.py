@@ -1,4 +1,4 @@
-"""GET /api/status/{job_id} and GET /api/jobs."""
+"""GET /api/status/{job_id}, GET /api/jobs and GET /api/credits."""
 
 from typing import Annotated
 
@@ -10,6 +10,7 @@ from app.queue.job import Job, JobState
 from app.queue.job_store import JobStore
 from app.services.auth import AuthUser, can_view, get_current_user
 from app.schemas import (
+    CreditsResponse,
     ErrorResponse,
     FailedStatus,
     FinishedStatus,
@@ -72,6 +73,21 @@ async def get_status(
     if job is None or not can_view(user, job.user_id):
         raise HTTPException(status_code=404, detail="Job not found")
     return _status_for(job, store)
+
+
+@router.get("/credits", response_model=CreditsResponse)
+async def get_credits(
+    store: Annotated[JobStore, Depends(get_store)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> CreditsResponse:
+    if user.role == "admin":
+        return CreditsResponse(allowance=0, spent=0, balance=0, unlimited=True)
+    spent = store.credits_spent(user.id)
+    return CreditsResponse(
+        allowance=user.credits,
+        spent=spent,
+        balance=max(user.credits - spent, 0),
+    )
 
 
 @router.get("/jobs", response_model=JobListResponse, response_model_exclude_none=True)

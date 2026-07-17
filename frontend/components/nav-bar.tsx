@@ -3,9 +3,11 @@
 import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
-import { AUTH_ENABLED } from "@/lib/api";
+import { AUTH_ENABLED, getCredits } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import type { CreditsResponse } from "@/types/api";
 
 interface NavItem {
   label: string;
@@ -121,6 +123,15 @@ export function NavBar() {
 
 function AccountMenu() {
   const { data: session, status } = useSession();
+  const userId = session?.user?.userId;
+  const [credits, setCredits] = useState<CreditsResponse | null>(null);
+  useEffect(() => {
+    if (!AUTH_ENABLED || !userId) return;
+    getCredits()
+      .then(setCredits)
+      .catch(() => setCredits(null));
+  }, [userId]);
+
   if (!AUTH_ENABLED || status === "loading") return null;
 
   if (!session?.user) {
@@ -148,7 +159,11 @@ function AccountMenu() {
         <div className="px-3 py-2">
           <p className="truncate text-xs text-foreground/90">{session.user.email}</p>
           <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            {session.user.approved ? "approved" : "awaiting approval"}
+            {credits === null
+              ? "…"
+              : credits.unlimited
+                ? "admin · unlimited"
+                : `${credits.balance} credits`}
           </p>
         </div>
         <button
