@@ -8,7 +8,10 @@ const nextConfig: NextConfig = {
   output: "standalone",
   async rewrites() {
     return [
-      { source: "/api/:path*", destination: `${backendUrl}/api/:path*` },
+      // /api/auth/* belongs to NextAuth. Its catch-all route is dynamic, and
+      // rewrites are matched before dynamic routes — so it must be excluded
+      // here or the proxy swallows every NextAuth endpoint.
+      { source: "/api/:path((?!auth/|auth$).*)", destination: `${backendUrl}/api/:path*` },
       { source: "/outputs/:path*", destination: `${backendUrl}/outputs/:path*` },
     ];
   },

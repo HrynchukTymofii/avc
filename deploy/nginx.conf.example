@@ -5,8 +5,6 @@
 #           sudo rm -f /etc/nginx/sites-enabled/default
 #
 # Replace studio.example.com with your subdomain everywhere, then:
-#   Basic auth:  sudo apt install apache2-utils
-#                sudo htpasswd -c /etc/nginx/.htpasswd yourname
 #   HTTPS:       sudo apt install certbot python3-certbot-nginx
 #                sudo certbot --nginx -d studio.example.com
 #   (certbot rewrites this file with the ssl_certificate lines and the :80
@@ -16,9 +14,9 @@ server {
     listen 80;
     server_name studio.example.com;
 
-    # One shared password at the door — this app queues expensive GPU jobs.
-    auth_basic "AI Video Studio";
-    auth_basic_user_file /etc/nginx/.htpasswd;
+    # No basic auth: the app has real accounts (NextAuth) and the backend
+    # requires a Bearer JWT on /api — but only when AUTH_ENABLED=true in .env.
+    # Never remove basic auth while that flag is off.
 
     # Avatar/reference uploads (backend enforces its own limit too).
     client_max_body_size 100m;
@@ -26,6 +24,15 @@ server {
     # Generation status polling is snappy, but big video downloads are not.
     proxy_read_timeout 300s;
     proxy_send_timeout 300s;
+
+    # NextAuth lives under /api/auth/ on the Next server, not the backend.
+    # Longest-prefix match wins, so this carves it out of the /api/ block below.
+    location /api/auth/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
     # API + generated files go straight to the backend, skipping the Next hop.
     location /api/ {
