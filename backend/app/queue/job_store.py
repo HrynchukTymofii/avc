@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from app.queue.job import Job, JobState, utc_now
+from app.queue.job import Job, JobState, params_from_dict, params_to_dict, utc_now
 from app.schemas import JobKind
 
 log = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class JobStore:
         kind: JobKind | None = None,
         user_id: str | None = None,
     ) -> list[Job]:
-        jobs = self._jobs.values()
+        jobs = (j for j in self._jobs.values() if not j.deleted)
         if kind is not None:
             jobs = (j for j in jobs if j.kind is kind)
         if user_id is not None:
@@ -130,6 +130,8 @@ def _snapshot_from_job(job: Job) -> dict[str, Any]:
         "label": job.label,
         "user_id": job.user_id,
         "cost": job.cost,
+        "deleted": job.deleted,
+        "params": params_to_dict(job.params) if job.params is not None else None,
         "progress": job.progress,
         "stage": job.stage,
         "error": job.error,
@@ -147,13 +149,24 @@ def _job_from_snapshot(data: dict[str, Any]) -> Job:
     created_at = parse_dt(data.get("created_at"))
     if created_at is None:
         raise ValueError("snapshot missing created_at")
+    kind = JobKind(data["kind"])
+    # Older snapshots have no params; treat any decode problem the same way —
+    # the job is still listable history, it just can't be regenerated.
+    params = None
+    raw_params = data.get("params")
+    if isinstance(raw_params, dict):
+        try:
+            params = params_from_dict(kind, raw_params)
+        except Exception:
+            log.warning("ignoring undecodable params in job snapshot %s", data.get("id"))
     return Job(
         id=str(data["id"]),
-        kind=JobKind(data["kind"]),
-        params=None,
+        kind=kind,
+        params=params,
         label=str(data.get("label", "")),
         user_id=str(data.get("user_id", "local")),
         cost=int(data.get("cost", 0)),
+        deleted=bool(data.get("deleted", False)),
         state=JobState(data["state"]),
         progress=int(data.get("progress", 0)),
         stage=data.get("stage"),

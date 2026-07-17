@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.config import Settings
 from app.deps import get_loras, get_settings_dep, get_store, get_worker
@@ -17,6 +17,7 @@ from app.queue.job import (
     FullVideoParams,
     ImageParams,
     Job,
+    JobState,
     LoraTrainingParams,
     TalkingHeadParams,
     UpscaleParams,
@@ -27,7 +28,7 @@ from app.queue.worker import GPUWorker
 from app.routes.voices import get_voices
 from app.schemas import ErrorResponse, JobCreatedResponse, JobKind
 from app.services import credits, ffmpeg
-from app.services.auth import AuthUser, get_current_user
+from app.services.auth import AuthUser, can_view, get_current_user
 from app.services.credits import require_credits
 from app.services.loras import TRIGGER_RE, LoraRegistry, LoraStyleInfo
 from app.services.script_parser import SegmentKind, parse_full_video_script
@@ -353,13 +354,54 @@ async def create_full_video(
     return JobCreatedResponse(job_id=job_id)
 
 
+_UPSCALE_VIDEO_EXTS = {".mp4", ".webm", ".mov", ".mkv"}
+_UPSCALE_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+def _read_source_job_output(
+    source_job: str,
+    source: str,
+    store: JobStore,
+    settings: Settings,
+    user: AuthUser,
+) -> tuple[bytes, str, str, str]:
+    """Resolve an upscale source from a finished job's output instead of an
+    upload. Returns (bytes, extension, media, display name)."""
+    job = store.get(source_job)
+    if job is None or job.deleted or not can_view(user, job.user_id):
+        raise HTTPException(status_code=404, detail="Source job not found")
+    if job.state is not JobState.FINISHED:
+        raise InputValidationError("the source job has no finished output yet")
+    key = source or ("video" if "video" in job.outputs else "image")
+    url = job.outputs.get(key)
+    if not url:
+        raise InputValidationError(f"the source job has no {key!r} output")
+    # Outputs are always "/outputs/{jobId}/{name}" — resolve by basename so a
+    # crafted key can't escape the job's own directory.
+    path = settings.outputs_dir / job.id / Path(url).name
+    if not path.is_file():
+        raise InputValidationError("the source file is no longer on the server")
+    extension = path.suffix.lower()
+    if extension in _UPSCALE_VIDEO_EXTS:
+        media = "video"
+    elif extension in _UPSCALE_IMAGE_EXTS:
+        media = "image"
+    else:
+        raise InputValidationError("only video and image outputs can be upscaled")
+    return path.read_bytes(), extension, media, job.label or Path(url).name
+
+
 @router.post("/upscale", response_model=JobCreatedResponse, responses=_RESPONSES)
 async def create_upscale(
     settings: Annotated[Settings, Depends(get_settings_dep)],
     worker: Annotated[GPUWorker, Depends(get_worker)],
     store: Annotated[JobStore, Depends(get_store)],
     user: Annotated[AuthUser, Depends(get_current_user)],
-    file: Annotated[UploadFile, File()],
+    file: Annotated[UploadFile | None, File()] = None,
+    # Alternative to `file`: upscale a finished job's output straight from the
+    # server (no re-upload). `source` picks the outputs key for multi-image jobs.
+    source_job: Annotated[str, Form()] = "",
+    source: Annotated[str, Form()] = "",
     model: Annotated[str, Form()] = "realesrgan-photo",
     scale: Annotated[int, Form()] = 4,
 ) -> JobCreatedResponse:
@@ -369,12 +411,20 @@ async def create_upscale(
             f"scale must be one of {', '.join(str(s) for s in OUTPUT_SCALES)}"
         )
 
-    data, extension, media = await read_media_upload(
-        file,
-        max_image_bytes=settings.max_upload_bytes,
-        max_video_bytes=settings.max_clip_upload_bytes,
-        field="file",
-    )
+    if source_job:
+        data, extension, media, source_name = _read_source_job_output(
+            source_job, source, store, settings, user
+        )
+    elif file is not None and (file.filename or file.size):
+        data, extension, media = await read_media_upload(
+            file,
+            max_image_bytes=settings.max_upload_bytes,
+            max_video_bytes=settings.max_clip_upload_bytes,
+            field="file",
+        )
+        source_name = Path(file.filename or "").name or f"{media} upload"
+    else:
+        raise InputValidationError("upload a file or pass source_job")
     cost = credits.upscale_cost(media)
     require_credits(user, cost, store)
 
@@ -407,7 +457,6 @@ async def create_upscale(
                 f"{settings.upscale_max_video_s:.0f} s"
             )
 
-    filename = Path(file.filename or "").name or f"{media} upload"
     job = Job(
         id=job_id,
         kind=JobKind.UPSCALE,
@@ -418,7 +467,7 @@ async def create_upscale(
             scale=scale,
             model=engine.id,
         ),
-        label=_label(f"{filename} · {scale}x"),
+        label=_label(f"{source_name} · {scale}x"),
         user_id=user.id,
         cost=cost,
     )

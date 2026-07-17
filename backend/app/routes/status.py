@@ -69,8 +69,8 @@ async def get_status(
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> StatusResponse:
     job = store.get(job_id)
-    # Someone else's job reads as absent, not forbidden — don't leak existence.
-    if job is None or not can_view(user, job.user_id):
+    # Someone else's (or a deleted) job reads as absent — don't leak existence.
+    if job is None or job.deleted or not can_view(user, job.user_id):
         raise HTTPException(status_code=404, detail="Job not found")
     return _status_for(job, store)
 

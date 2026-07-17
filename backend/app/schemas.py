@@ -126,6 +126,34 @@ class JobListResponse(BaseModel):
     jobs: list[JobSummary]
 
 
+class JobDetailResponse(BaseModel):
+    """Everything the library detail dialog shows about one job."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    job_id: str = Field(serialization_alias="jobId")
+    kind: JobKind
+    status: Literal["queued", "processing", "finished", "failed"]
+    label: str
+    created_at: datetime = Field(serialization_alias="createdAt")
+    cost: int
+    # Engine id and the prompt/script the job was created with (absent when the
+    # snapshot predates params persistence).
+    model: str | None = None
+    prompt: str | None = None
+    voice: str | None = None
+    error: str | None = None
+    video: str | None = None
+    audio: str | None = None
+    image: str | None = None
+    images: list[str] | None = None
+    # False when the job's settings weren't saved (pre-update history) or its
+    # input files are gone — the UI greys the Regenerate button out.
+    can_regenerate: bool = Field(default=False, serialization_alias="canRegenerate")
+    # True for finished jobs with a video or image output.
+    can_upscale: bool = Field(default=False, serialization_alias="canUpscale")
+
+
 # ---- voices ------------------------------------------------------------------------
 
 

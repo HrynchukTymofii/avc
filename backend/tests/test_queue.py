@@ -234,7 +234,7 @@ def test_snapshot_written_and_rehydrated(store: JobStore, tmp_path) -> None:
     assert restored is not None
     assert restored.state is JobState.FINISHED
     assert restored.outputs == {"video": "/outputs/x/output.mp4"}
-    assert restored.params is None  # history entry, never reprocessed
+    assert restored.params == job.params  # kept so the job can be regenerated
 
 
 def test_rehydrate_fails_interrupted_jobs(store: JobStore, tmp_path) -> None:

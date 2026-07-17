@@ -20,6 +20,7 @@ from app.pipelines.wan_pipeline import WanPipeline
 from app.queue.job_store import JobStore
 from app.queue.worker import GPUWorker, JobProcessor
 from app.routes import generation as generation_routes
+from app.routes import jobs as jobs_routes
 from app.routes import loras as loras_routes
 from app.routes import models as models_routes
 from app.routes import status as status_routes
@@ -134,6 +135,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.mount("/outputs", StaticFiles(directory=settings.outputs_dir), name="outputs")
     app.include_router(status_routes.router)
+    app.include_router(jobs_routes.router)
     app.include_router(voices_routes.router)
     app.include_router(generation_routes.router)
     app.include_router(models_routes.router)
