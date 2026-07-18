@@ -29,6 +29,38 @@ _MAX_CHUNK_CHARS = 400
 _INTER_CHUNK_SILENCE_S = 0.25
 _OUTPUT_SAMPLE_RATE = 44_100
 
+# Author-controlled silences: [pause] = default, [pause:2] / [pause:1.5] = that
+# many seconds (capped). The marker never reaches the TTS model.
+_PAUSE_RE = re.compile(r"\[\s*pause(?:\s*[:\s]\s*(\d+(?:\.\d+)?)\s*s?)?\s*\]", re.IGNORECASE)
+_DEFAULT_PAUSE_S = 0.6
+_MAX_PAUSE_S = 10.0
+
+
+def parse_pause_markers(text: str) -> list[tuple[str, float]]:
+    """Split a script at [pause] markers. Returns (text, silence_after_s) parts;
+    the last part always ends with 0.0. Adjacent/leading markers accumulate into
+    the surrounding gaps and empty parts are dropped."""
+    parts: list[tuple[str, float]] = []
+    cursor = 0
+    pending_text = ""
+    for match in _PAUSE_RE.finditer(text):
+        pending_text += text[cursor : match.start()]
+        cursor = match.end()
+        seconds = min(float(match.group(1) or _DEFAULT_PAUSE_S), _MAX_PAUSE_S)
+        if pending_text.strip():
+            parts.append((pending_text.strip(), seconds))
+            pending_text = ""
+        elif parts:
+            # marker directly after another: extend the previous gap
+            previous_text, previous_pause = parts[-1]
+            parts[-1] = (previous_text, min(previous_pause + seconds, _MAX_PAUSE_S))
+    pending_text += text[cursor:]
+    if pending_text.strip():
+        parts.append((pending_text.strip(), 0.0))
+    elif parts:
+        parts[-1] = (parts[-1][0], 0.0)  # trailing pause is pointless — drop it
+    return parts
+
 
 def split_script(text: str, max_chars: int = _MAX_CHUNK_CHARS) -> list[str]:
     """Split a script into synthesis chunks at sentence boundaries, merging
@@ -182,17 +214,25 @@ class S2Pipeline(ManagedPipeline):
             raise RuntimeError("S2 pipeline must be ON_GPU before generate()")
 
         prompt_tokens, prompt_text = self._encode_reference(reference_audio, reference_text)
-        chunks = split_script(text)
-        if not chunks:
+        # (chunk, silence_after_s): [pause] markers control the gap between
+        # parts, sentence groups inside a part get the default short silence.
+        plan: list[tuple[str, float]] = []
+        for part_text, pause_after in parse_pause_markers(text):
+            chunks = split_script(part_text)
+            for index, chunk in enumerate(chunks):
+                after = _INTER_CHUNK_SILENCE_S if index < len(chunks) - 1 else pause_after
+                plan.append((chunk, after))
+        if not plan:
             raise ValueError("script contains no speakable text")
 
-        silence = np.zeros(int(_INTER_CHUNK_SILENCE_S * _OUTPUT_SAMPLE_RATE), dtype=np.float32)
         pieces: list[np.ndarray] = []
-        for index, chunk in enumerate(chunks):
+        for index, (chunk, silence_s) in enumerate(plan):
             pieces.append(self._synthesize_chunk(chunk, prompt_tokens, prompt_text))
-            if index < len(chunks) - 1:
-                pieces.append(silence)
-            on_progress((index + 1) / len(chunks))
+            if silence_s > 0 and index < len(plan) - 1:
+                pieces.append(
+                    np.zeros(int(silence_s * _OUTPUT_SAMPLE_RATE), dtype=np.float32)
+                )
+            on_progress((index + 1) / len(plan))
 
         waveform = np.concatenate(pieces)
         out_path.parent.mkdir(parents=True, exist_ok=True)

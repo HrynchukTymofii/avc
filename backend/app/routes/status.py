@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.deps import get_settings_dep, get_store
 from app.config import Settings
-from app.queue.job import Job, JobState
+from app.queue.job import Job, JobState, TalkingHeadParams, UpscaleParams
 from app.queue.job_store import JobStore
 from app.services.auth import AuthUser, can_view, get_current_user
 from app.schemas import (
@@ -115,6 +115,13 @@ async def list_jobs(
                 video=job.outputs.get("video"),
                 audio=job.outputs.get("audio"),
                 image=job.outputs.get("image"),
+                images=_image_urls(job.outputs),
+                voice_only=job.params.voice_only
+                if isinstance(job.params, TalkingHeadParams)
+                else None,
+                media=job.params.media
+                if isinstance(job.params, UpscaleParams)
+                else None,
             )
             for job in jobs
         ]

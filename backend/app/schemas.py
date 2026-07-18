@@ -120,6 +120,15 @@ class JobSummary(BaseModel):
     video: str | None = None
     audio: str | None = None
     image: str | None = None
+    # All generated images for multi-image jobs (image holds the first one) —
+    # the grids render one tile per image.
+    images: list[str] | None = None
+    # talking_head only: True for narration-only jobs (the Voice Over tab shows
+    # exactly these; the Talking Head tab hides them). None when unknown.
+    voice_only: bool | None = Field(default=None, serialization_alias="voiceOnly")
+    # upscale only: which media type the job enlarges (the Upscale Image and
+    # Upscale Video views filter on this). None when unknown.
+    media: Literal["image", "video"] | None = None
 
 
 class JobListResponse(BaseModel):
