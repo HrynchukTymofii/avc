@@ -85,7 +85,8 @@ export default function FullVideoPage() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const status = useJobPolling(jobId);
-  const busy = submitting || (jobId !== null && !isTerminal(status));
+  // the queue takes more submissions while a job runs — only lock during the POST
+  const busy = submitting;
 
   const terminalNotified = useRef<string | null>(null);
   useEffect(() => {
@@ -159,6 +160,7 @@ export default function FullVideoPage() {
         kind="full_video"
         refreshKey={refreshKey}
         status={status}
+        activeJobId={jobId}
         emptyTitle="Full Video Studio"
         emptyHint="One tagged script in, one finished video out. Write narration and drop in [BROLL: …], [IMAGE: …], [CLIP: file.mp4] or [ONCAMERA] markers — the scenes appear below as you type."
       />

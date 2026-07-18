@@ -47,7 +47,8 @@ function BrollStudio() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const status = useJobPolling(jobId);
-  const busy = submitting || (jobId !== null && !isTerminal(status));
+  // the queue takes more submissions while a job runs — only lock during the POST
+  const busy = submitting;
   const cost = brollCost(model);
 
   const terminalNotified = useRef<string | null>(null);
@@ -87,6 +88,7 @@ function BrollStudio() {
         kind="broll"
         refreshKey={refreshKey}
         status={status}
+        activeJobId={jobId}
         emptyTitle="B-Roll Generator"
         emptyHint="Describe the shot below — short AI clips for your edit. Use + to start from a reference image. A 5-second clip takes roughly 3–8 minutes."
       />

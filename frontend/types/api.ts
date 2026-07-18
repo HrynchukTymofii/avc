@@ -73,6 +73,8 @@ export interface JobSummary {
   images?: string[];
   /** talking_head only: true = narration-only job (Voice Over tab). */
   voiceOnly?: boolean;
+  /** upscale only: which media type the job enlarges. */
+  media?: "image" | "video";
 }
 
 export interface JobListResponse {

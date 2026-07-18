@@ -108,7 +108,7 @@ const GROUPS: NavGroup[] = [
       {
         label: "Upscale Video",
         desc: "Sharpen and enlarge with Real-ESRGAN",
-        href: "/upscale",
+        href: "/upscale?media=video",
         icon: Wand2Icon,
       },
     ],
@@ -133,7 +133,7 @@ const GROUPS: NavGroup[] = [
       {
         label: "Upscale Image",
         desc: "Sharpen and enlarge with Real-ESRGAN",
-        href: "/upscale",
+        href: "/upscale?media=image",
         icon: Wand2Icon,
       },
     ],

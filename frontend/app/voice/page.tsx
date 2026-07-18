@@ -34,7 +34,8 @@ export default function VoicePage() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const status = useJobPolling(jobId);
-  const busy = submitting || (jobId !== null && !isTerminal(status));
+  // the queue takes more submissions while a job runs — only lock during the POST
+  const busy = submitting;
   const cost = voiceOverCost(script);
 
   const terminalNotified = useRef<string | null>(null);
@@ -74,6 +75,7 @@ export default function VoicePage() {
         kind="talking_head"
         refreshKey={refreshKey}
         status={status}
+        activeJobId={jobId}
         // only narration jobs here — lip-sync videos live on the Video tab
         filterJobs={onlyVoiceOvers}
         emptyTitle="Voice Over Studio"

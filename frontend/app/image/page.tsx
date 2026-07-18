@@ -48,7 +48,8 @@ function ImageStudio() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const status = useJobPolling(jobId);
-  const busy = submitting || (jobId !== null && !isTerminal(status));
+  // the queue takes more submissions while a job runs — only lock during the POST
+  const busy = submitting;
   const cost = imageCost(model, Number(count));
 
   const terminalNotified = useRef<string | null>(null);
@@ -88,6 +89,7 @@ function ImageStudio() {
         kind="image"
         refreshKey={refreshKey}
         status={status}
+        activeJobId={jobId}
         emptyTitle="Image Generator"
         emptyHint="Describe the scene below and pick a format — your images appear here, newest at the bottom. Under a minute per image once the model is warm."
       />

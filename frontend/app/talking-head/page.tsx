@@ -40,7 +40,8 @@ function TalkingHeadStudio() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const status = useJobPolling(jobId);
-  const busy = submitting || (jobId !== null && !isTerminal(status));
+  // the queue takes more submissions while a job runs — only lock during the POST
+  const busy = submitting;
   const cost = talkingHeadCost(model, script);
 
   const terminalNotified = useRef<string | null>(null);
@@ -80,6 +81,7 @@ function TalkingHeadStudio() {
         kind="talking_head"
         refreshKey={refreshKey}
         status={status}
+        activeJobId={jobId}
         // narration-only jobs live on the Voice Over tab
         filterJobs={withoutVoiceOvers}
         emptyTitle="Talking Head Studio"

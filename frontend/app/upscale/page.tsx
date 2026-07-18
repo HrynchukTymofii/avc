@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
 import { GenerationFeed } from "@/components/generation-feed";
@@ -22,11 +23,24 @@ import {
 import { submitUpscale } from "@/lib/api";
 import { upscaleCost } from "@/lib/pricing";
 import { isTerminal, useJobPolling } from "@/lib/use-job-polling";
+import type { JobSummary } from "@/types/api";
 
 const SCALES = [
   { value: "4", label: "4× — maximum detail" },
   { value: "2", label: "2× — smaller output" },
 ] as const;
+
+const IMAGE_ACCEPT = "image/png,image/jpeg,image/webp";
+const VIDEO_ACCEPT = "video/mp4,video/quicktime,video/webm";
+
+// The nav links here as "Upscale Image" (/upscale?media=image) and "Upscale
+// Video" (/upscale?media=video) — each view lists only its own media type.
+// Jobs from before `media` was in the summary are classified by their output.
+const jobMedia = (job: JobSummary) => job.media ?? (job.video ? "video" : "image");
+const MEDIA_FILTERS: Record<"image" | "video", (job: JobSummary) => boolean> = {
+  image: (job) => jobMedia(job) === "image",
+  video: (job) => jobMedia(job) === "video",
+};
 
 export default function UpscalePage() {
   return (
@@ -37,6 +51,8 @@ export default function UpscalePage() {
 }
 
 function UpscaleStudio() {
+  const mediaParam = useSearchParams().get("media");
+  const media = mediaParam === "image" || mediaParam === "video" ? mediaParam : null;
   const [file, setFile] = useState<File | null>(null);
   const [model, setModel] = useState("");
   const [scale, setScale] = useState<string>("4");
@@ -46,7 +62,8 @@ function UpscaleStudio() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const status = useJobPolling(jobId);
-  const busy = submitting || (jobId !== null && !isTerminal(status));
+  // the queue takes more submissions while a job runs — only lock during the POST
+  const busy = submitting;
   const cost = upscaleCost(file?.type.startsWith("video/") ? "video" : "image");
 
   const terminalNotified = useRef<string | null>(null);
@@ -83,23 +100,53 @@ function UpscaleStudio() {
         kind="upscale"
         refreshKey={refreshKey}
         status={status}
-        emptyTitle="Upscaler"
-        emptyHint="Add an image or a short video with + and enlarge it with Real-ESRGAN. Tip: you can also upscale any generation straight from its tile in the Library."
+        activeJobId={jobId}
+        filterJobs={media ? MEDIA_FILTERS[media] : undefined}
+        emptyTitle={
+          media === "video"
+            ? "Video Upscaler"
+            : media === "image"
+              ? "Image Upscaler"
+              : "Upscaler"
+        }
+        emptyHint={
+          media === "video"
+            ? "Add a short video with + and enlarge it with Real-ESRGAN. Tip: you can also upscale any generation straight from its tile in the Library."
+            : media === "image"
+              ? "Add an image with + and enlarge it with Real-ESRGAN. Tip: you can also upscale any generation straight from its tile in the Library."
+              : "Add an image or a short video with + and enlarge it with Real-ESRGAN. Tip: you can also upscale any generation straight from its tile in the Library."
+        }
       />
 
       <StudioComposer>
         <div className="flex items-center gap-3">
           <ComposerAttach
-            label="Image or video to upscale"
+            label={
+              media === "video"
+                ? "Video to upscale"
+                : media === "image"
+                  ? "Image to upscale"
+                  : "Image or video to upscale"
+            }
             file={file}
             onChange={setFile}
-            accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime,video/webm"
+            accept={
+              media === "video"
+                ? VIDEO_ACCEPT
+                : media === "image"
+                  ? IMAGE_ACCEPT
+                  : `${IMAGE_ACCEPT},${VIDEO_ACCEPT}`
+            }
             disabled={busy}
           />
           <p className="flex-1 text-sm text-muted-foreground">
             {file
               ? `${file.name} · ${(file.size / 1_000_000).toFixed(1)} MB`
-              : "PNG/JPEG ≤ 20 MB · MP4/MOV/WebM ≤ 200 MB, ≤ 2 min"}
+              : media === "video"
+                ? "MP4/MOV/WebM ≤ 200 MB, ≤ 2 min"
+                : media === "image"
+                  ? "PNG/JPEG/WebP ≤ 20 MB"
+                  : "PNG/JPEG ≤ 20 MB · MP4/MOV/WebM ≤ 200 MB, ≤ 2 min"}
           </p>
         </div>
         {submitError && (

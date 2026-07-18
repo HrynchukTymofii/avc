@@ -14,6 +14,9 @@ interface GenerationFeedProps {
   refreshKey?: number;
   /** Active job status — rendered as a live tile at the end of the grid. */
   status?: JobStatus | null;
+  /** The job behind `status` — its list card is hidden while the live tile
+   * shows, so a freshly submitted job doesn't appear twice. */
+  activeJobId?: string | null;
   /** Narrow the list further (e.g. voice-only talking-head jobs). */
   filterJobs?: (job: JobSummary) => boolean;
   emptyTitle: string;
@@ -27,6 +30,7 @@ export function GenerationFeed({
   kind,
   refreshKey = 0,
   status = null,
+  activeJobId = null,
   filterJobs,
   emptyTitle,
   emptyHint,
@@ -50,6 +54,18 @@ export function GenerationFeed({
   useEffect(() => {
     void refresh();
   }, [refresh, refreshKey]);
+
+  // Several generations can sit in the queue at once but only the newest one
+  // gets the live status tile — keep refetching while any listed job is still
+  // working so the older tiles move queued → processing → finished on their own.
+  useEffect(() => {
+    const working = jobs?.some(
+      (job) => job.status === "queued" || job.status === "processing",
+    );
+    if (!working) return;
+    const timer = setTimeout(() => void refresh(), 4000);
+    return () => clearTimeout(timer);
+  }, [jobs, refresh]);
 
   useEffect(() => {
     const onScroll = () => {
@@ -77,6 +93,11 @@ export function GenerationFeed({
 
   const showActiveTile =
     status !== null && (status.status === "queued" || status.status === "processing");
+  // the live tile already represents the active job — hide its list card
+  const visibleJobs =
+    showActiveTile && activeJobId
+      ? (jobs?.filter((job) => job.jobId !== activeJobId) ?? null)
+      : jobs;
 
   if (jobs !== null && jobs.length === 0 && !showActiveTile) {
     return (
@@ -95,7 +116,7 @@ export function GenerationFeed({
         // media sizes settle after first paint — keep the view anchored
         onLoadCapture={anchor}
       >
-        {jobs?.flatMap((job) =>
+        {visibleJobs?.flatMap((job) =>
           jobTiles(job).map((tile) => (
             <JobCard
               key={tile.key}
