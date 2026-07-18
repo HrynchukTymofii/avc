@@ -16,22 +16,38 @@ import type { JobSummary } from "@/types/api";
 
 interface JobCardProps {
   job: JobSummary;
+  /** Multi-image jobs render one tile per image — this is the tile's image. */
+  image?: string;
+  /** Outputs key of that image ("image", "image_2", …) so Upscale targets it. */
+  imageKey?: string;
   onOpen: (jobId: string) => void;
   /** Called after a quick action changed the library (regenerate/upscale/delete). */
   onChanged?: () => void;
 }
 
+/** One grid tile per generated image: multi-image jobs expand into several
+ * tiles, everything else stays a single tile. */
+export function jobTiles(job: JobSummary): { key: string; image?: string; imageKey?: string }[] {
+  if (!job.images || job.images.length < 2) return [{ key: job.jobId }];
+  return job.images.map((url, index) => ({
+    key: `${job.jobId}:${index}`,
+    image: url,
+    imageKey: index === 0 ? "image" : `image_${index + 1}`,
+  }));
+}
+
 /** Uniform grid tile. Click opens the detail dialog; hovering reveals square
  * quick-action buttons (download / upscale / regenerate / delete) on the media
  * itself, so common actions never need the dialog. */
-export function JobCard({ job, onOpen, onChanged }: JobCardProps) {
+export function JobCard({ job, image, imageKey, onOpen, onChanged }: JobCardProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const downloadUrl = job.video ?? job.image ?? job.audio;
+  const imageUrl = image ?? job.image;
+  const downloadUrl = job.video ?? imageUrl ?? job.audio;
   const canUpscale =
-    job.status === "finished" && (job.video || job.image) && job.kind !== "upscale";
+    job.status === "finished" && (job.video || imageUrl) && job.kind !== "upscale";
 
   const run = async (action: string, work: () => Promise<void>) => {
     setBusy(action);
@@ -66,10 +82,10 @@ export function JobCard({ job, onOpen, onChanged }: JobCardProps) {
             tabIndex={-1}
             className="pointer-events-none aspect-video w-full bg-black object-cover"
           />
-        ) : job.status === "finished" && job.image ? (
+        ) : job.status === "finished" && imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={job.image}
+            src={imageUrl}
             alt={job.label || "generated image"}
             className="aspect-video w-full bg-black object-cover"
           />
@@ -113,7 +129,7 @@ export function JobCard({ job, onOpen, onChanged }: JobCardProps) {
               disabled={busy !== null}
               onClick={() =>
                 run("upscale", async () => {
-                  await submitUpscale({ sourceJob: job.jobId });
+                  await submitUpscale({ sourceJob: job.jobId, source: imageKey });
                 })
               }
               className="flex size-8 items-center justify-center rounded-lg bg-black/70 text-white backdrop-blur-sm transition-colors hover:bg-black/90 disabled:opacity-50"

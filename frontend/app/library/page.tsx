@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { JobCard } from "@/components/job-card";
+import { JobCard, jobTiles } from "@/components/job-card";
 import { JobDetailDialog } from "@/components/job-detail-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -92,14 +92,18 @@ export default function LibraryPage() {
           className="grid gap-3"
           style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}
         >
-          {jobs.map((job) => (
-            <JobCard
-              key={job.jobId}
-              job={job}
-              onOpen={setOpenJobId}
-              onChanged={() => void refresh()}
-            />
-          ))}
+          {jobs.flatMap((job) =>
+            jobTiles(job).map((tile) => (
+              <JobCard
+                key={tile.key}
+                job={job}
+                image={tile.image}
+                imageKey={tile.imageKey}
+                onOpen={setOpenJobId}
+                onChanged={() => void refresh()}
+              />
+            )),
+          )}
         </div>
       )}
 

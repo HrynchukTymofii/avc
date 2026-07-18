@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { JobCard } from "@/components/job-card";
+import { JobCard, jobTiles } from "@/components/job-card";
 import { JobDetailDialog } from "@/components/job-detail-dialog";
 import { getJobs } from "@/lib/api";
 import { stageLabel } from "@/types/api";
@@ -95,14 +95,18 @@ export function GenerationFeed({
         // media sizes settle after first paint — keep the view anchored
         onLoadCapture={anchor}
       >
-        {jobs?.map((job) => (
-          <JobCard
-            key={job.jobId}
-            job={job}
-            onOpen={setOpenJobId}
-            onChanged={() => void refresh()}
-          />
-        ))}
+        {jobs?.flatMap((job) =>
+          jobTiles(job).map((tile) => (
+            <JobCard
+              key={tile.key}
+              job={job}
+              image={tile.image}
+              imageKey={tile.imageKey}
+              onOpen={setOpenJobId}
+              onChanged={() => void refresh()}
+            />
+          )),
+        )}
         {showActiveTile && <ActiveJobTile status={status} />}
       </div>
       <JobDetailDialog

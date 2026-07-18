@@ -69,6 +69,8 @@ export interface JobSummary {
   video?: string;
   audio?: string;
   image?: string;
+  /** All generated images for multi-image jobs (image holds the first one). */
+  images?: string[];
   /** talking_head only: true = narration-only job (Voice Over tab). */
   voiceOnly?: boolean;
 }
