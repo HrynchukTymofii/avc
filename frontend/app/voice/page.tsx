@@ -10,9 +10,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { submitTalkingHead } from "@/lib/api";
+import { voiceOverCost } from "@/lib/pricing";
 import { isTerminal, useJobPolling } from "@/lib/use-job-polling";
 
-// Mirrors the backend's pricing pace: ~900 spoken characters per minute.
+// ~900 spoken characters per minute (the backend prices at the same pace).
 const CHARS_PER_MINUTE = 900;
 
 function estimateDuration(chars: number): string {
@@ -21,9 +22,8 @@ function estimateDuration(chars: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-function estimateCredits(chars: number): number {
-  return Math.max(1, Math.ceil(chars / CHARS_PER_MINUTE));
-}
+// stable reference — an inline arrow would refetch the feed on every render
+const onlyVoiceOvers = (job: { voiceOnly?: boolean }) => job.voiceOnly === true;
 
 export default function VoicePage() {
   const [script, setScript] = useState("");
@@ -35,6 +35,7 @@ export default function VoicePage() {
 
   const status = useJobPolling(jobId);
   const busy = submitting || (jobId !== null && !isTerminal(status));
+  const cost = voiceOverCost(script);
 
   const terminalNotified = useRef<string | null>(null);
   useEffect(() => {
@@ -44,7 +45,6 @@ export default function VoicePage() {
     }
   }, [jobId, status]);
 
-  const chars = script.length;
   const canSubmit = script.trim() !== "" && voice !== "";
 
   const handleSubmit = async () => {
@@ -74,15 +74,17 @@ export default function VoicePage() {
         kind="talking_head"
         refreshKey={refreshKey}
         status={status}
+        // only narration jobs here — lip-sync videos live on the Video tab
+        filterJobs={onlyVoiceOvers}
         emptyTitle="Voice Over Studio"
-        emptyHint="Write your narration below — an S2 Pro voice clone reads it exactly as written. Punctuation drives the pacing: commas pause, periods breathe."
+        emptyHint="Write your narration below — an S2 Pro voice clone reads it exactly as written. Punctuation drives the pacing, and [pause] inserts real silence."
       />
 
       <StudioComposer>
         <Textarea
           value={script}
           onChange={(event) => setScript(event.target.value)}
-          placeholder="Write your narration… commas make short pauses, periods end phrases, “…” trails off"
+          placeholder="Write your narration… commas make short pauses, [pause:2] holds two seconds of silence"
           className="max-h-64 min-h-20 resize-none border-0 bg-transparent text-[15px] leading-relaxed shadow-none focus-visible:ring-0 dark:bg-transparent"
           disabled={busy}
           onKeyDown={(event) => {
@@ -97,19 +99,20 @@ export default function VoicePage() {
           </Alert>
         )}
         <div className="flex flex-wrap items-center gap-2 border-t pt-2.5">
-          <ComposerControl>
+          <ComposerControl label="Voice">
             <VoiceSelect value={voice} onChange={setVoice} disabled={busy} compact />
           </ComposerControl>
           <VoiceGuideDialog />
           <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            ≈ {estimateDuration(chars)} · {estimateCredits(chars)} cr
+            ≈ {estimateDuration(script.length)}
           </span>
           <Button
-            className="ml-auto font-mono text-xs uppercase tracking-widest"
+            size="lg"
+            className="ml-auto rounded-lg font-mono text-xs uppercase tracking-widest"
             onClick={handleSubmit}
             disabled={busy || !canSubmit}
           >
-            {busy ? "Synthesizing…" : "Generate"}
+            {busy ? "Synthesizing…" : `Generate · ${cost} cr`}
           </Button>
         </div>
       </StudioComposer>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 
 import { GenerationFeed } from "@/components/generation-feed";
 import { ModelSelect } from "@/components/model-select";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { submitImage } from "@/lib/api";
+import { imageCost } from "@/lib/pricing";
 import { isTerminal, useJobPolling } from "@/lib/use-job-polling";
 
 const ORIENTATIONS = [
@@ -28,6 +29,14 @@ const ORIENTATIONS = [
 const COUNTS = ["1", "2", "3", "4"] as const;
 
 export default function ImagePage() {
+  return (
+    <Suspense fallback={null}>
+      <ImageStudio />
+    </Suspense>
+  );
+}
+
+function ImageStudio() {
   const [prompt, setPrompt] = useState("");
   const [orientation, setOrientation] = useState<string>("landscape");
   const [model, setModel] = useState("");
@@ -40,6 +49,7 @@ export default function ImagePage() {
 
   const status = useJobPolling(jobId);
   const busy = submitting || (jobId !== null && !isTerminal(status));
+  const cost = imageCost(model, Number(count));
 
   const terminalNotified = useRef<string | null>(null);
   useEffect(() => {
@@ -148,18 +158,19 @@ export default function ImagePage() {
               </SelectContent>
             </Select>
           </ComposerControl>
-          {model === "wan-5b" && (
-            <ComposerControl>
-              <StyleSelect value={lora} onChange={setLora} disabled={busy} compact />
-            </ComposerControl>
-          )}
-          <Button
-            className="ml-auto font-mono text-xs uppercase tracking-widest"
-            onClick={handleSubmit}
-            disabled={busy || !prompt.trim()}
-          >
-            {busy ? "Generating…" : "Generate"}
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            {model === "wan-5b" && (
+              <StyleSelect value={lora} onChange={setLora} disabled={busy} tile />
+            )}
+            <Button
+              size="lg"
+              className="rounded-lg font-mono text-xs uppercase tracking-widest"
+              onClick={handleSubmit}
+              disabled={busy || !prompt.trim()}
+            >
+              {busy ? "Generating…" : `Generate · ${cost} cr`}
+            </Button>
+          </div>
         </div>
       </StudioComposer>
     </Studio>

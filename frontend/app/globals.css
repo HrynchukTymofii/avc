@@ -119,8 +119,8 @@
   --sidebar-accent-foreground: oklch(0.94 0.008 250);
   --sidebar-border: oklch(1 0 0 / 13%);
   --sidebar-ring: oklch(0.62 0.19 258 / 55%);
-  /* Clay geometry: rounded-lg = 16px, xl ≈ 22px, 2xl ≈ 29px. */
-  --radius: 1rem;
+  /* Moderate geometry: rounded-lg ≈ 11px, xl ≈ 16px, 2xl ≈ 20px. */
+  --radius: 0.7rem;
 }
 
 @layer base {

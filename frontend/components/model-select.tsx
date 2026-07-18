@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import {
@@ -26,27 +27,31 @@ interface ModelSelectProps {
  * until the premium tier exists. */
 export function ModelSelect({ kind, value, onChange, disabled, compact }: ModelSelectProps) {
   const [engines, setEngines] = useState<EngineInfo[] | null>(null);
+  // useSearchParams (not window.location) so nav clicks like /image?model=flux
+  // apply even when the page is already mounted (same route, new query).
+  const requested = useSearchParams().get("model");
 
   useEffect(() => {
     let cancelled = false;
     getModels()
       .then((response) => {
-        if (cancelled) return;
-        const list = response.models[kind] ?? [];
-        setEngines(list);
-        const requested = new URLSearchParams(window.location.search).get("model");
-        const preselect =
-          list.find((engine) => engine.id === requested && engine.available) ??
-          list.find((engine) => engine.default) ??
-          list.find((engine) => engine.available);
-        if (preselect) onChange(preselect.id);
+        if (!cancelled) setEngines(response.models[kind] ?? []);
       })
       .catch(() => setEngines([]));
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind]);
+
+  useEffect(() => {
+    if (!engines) return;
+    const preselect =
+      engines.find((engine) => engine.id === requested && engine.available) ??
+      engines.find((engine) => engine.default) ??
+      engines.find((engine) => engine.available);
+    if (preselect) onChange(preselect.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engines, requested]);
 
   const selected = engines?.find((engine) => engine.id === value);
 

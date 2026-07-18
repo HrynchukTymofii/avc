@@ -2,46 +2,50 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { JobCard } from "@/components/job-card";
 import { JobDetailDialog } from "@/components/job-detail-dialog";
-import { JobProgress } from "@/components/job-progress";
-import { JobStatusBadge } from "@/components/job-card";
 import { getJobs } from "@/lib/api";
-import { timeAgo } from "@/lib/format";
+import { stageLabel } from "@/types/api";
 import type { JobKind, JobStatus, JobSummary } from "@/types/api";
 
 interface GenerationFeedProps {
   kind: JobKind;
   /** Bump to refetch (on submit and when the active job finishes). */
   refreshKey?: number;
-  /** Active job status — rendered as a live progress bubble at the bottom. */
+  /** Active job status — rendered as a live tile at the end of the grid. */
   status?: JobStatus | null;
+  /** Narrow the list further (e.g. voice-only talking-head jobs). */
+  filterJobs?: (job: JobSummary) => boolean;
   emptyTitle: string;
   emptyHint: string;
 }
 
-/** Chat-style history: oldest at the top, newest directly above the composer.
- * Every card opens the detail dialog (download / regenerate / upscale / delete). */
+/** History as an adaptive grid, oldest first — the newest tiles sit at the
+ * bottom, right above the composer. Tiles carry hover quick actions and open
+ * the detail dialog on click. */
 export function GenerationFeed({
   kind,
   refreshKey = 0,
   status = null,
+  filterJobs,
   emptyTitle,
   emptyHint,
 }: GenerationFeedProps) {
   const [jobs, setJobs] = useState<JobSummary[] | null>(null);
   const [openJobId, setOpenJobId] = useState<string | null>(null);
-  // Follow the newest generation (chat behavior) until the user scrolls up to
-  // browse history; media loading in above cards re-anchors while following.
+  // Follow the newest generation until the user scrolls up to browse history;
+  // media loading in tiles above re-anchors while following.
   const followBottom = useRef(true);
 
   const refresh = useCallback(async () => {
     try {
-      const response = await getJobs({ kind, limit: 30 });
-      setJobs([...response.jobs].reverse()); // oldest first, newest at the bottom
+      const response = await getJobs({ kind, limit: 60 });
+      const list = [...response.jobs].reverse(); // oldest first
+      setJobs(filterJobs ? list.filter(filterJobs) : list);
     } catch {
       setJobs([]);
     }
-  }, [kind]);
+  }, [kind, filterJobs]);
 
   useEffect(() => {
     void refresh();
@@ -59,7 +63,7 @@ export function GenerationFeed({
 
   const anchor = useCallback(() => {
     // scroll the document fully down — the sticky composer sits after the feed
-    // in flow, so max scroll puts the newest card right above it
+    // in flow, so max scroll puts the newest tiles right above it
     if (followBottom.current) {
       window.scrollTo({ top: document.documentElement.scrollHeight });
     }
@@ -71,7 +75,10 @@ export function GenerationFeed({
     anchor();
   }, [jobCount, refreshKey, status?.status, anchor]);
 
-  if (jobs !== null && jobs.length === 0 && !status) {
+  const showActiveTile =
+    status !== null && (status.status === "queued" || status.status === "processing");
+
+  if (jobs !== null && jobs.length === 0 && !showActiveTile) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-center">
         <h1 className="font-heading text-2xl font-semibold tracking-tight">{emptyTitle}</h1>
@@ -81,15 +88,23 @@ export function GenerationFeed({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col justify-end gap-4 py-6">
-      {jobs?.map((job) => (
-        <FeedCard key={job.jobId} job={job} onOpen={setOpenJobId} onMediaLoad={anchor} />
-      ))}
-      {status && status.status !== "finished" && (
-        <div className="max-w-xl">
-          <JobProgress status={status} />
-        </div>
-      )}
+    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-end py-6">
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}
+        // media sizes settle after first paint — keep the view anchored
+        onLoadCapture={anchor}
+      >
+        {jobs?.map((job) => (
+          <JobCard
+            key={job.jobId}
+            job={job}
+            onOpen={setOpenJobId}
+            onChanged={() => void refresh()}
+          />
+        ))}
+        {showActiveTile && <ActiveJobTile status={status} />}
+      </div>
       <JobDetailDialog
         jobId={openJobId}
         onClose={() => setOpenJobId(null)}
@@ -99,70 +114,26 @@ export function GenerationFeed({
   );
 }
 
-function FeedCard({
-  job,
-  onOpen,
-  onMediaLoad,
-}: {
-  job: JobSummary;
-  onOpen: (jobId: string) => void;
-  /** Media sizes arrive after render — lets the feed re-anchor to the bottom. */
-  onMediaLoad: () => void;
-}) {
+/** The in-progress generation as a normal grid tile: spinner + percent. */
+function ActiveJobTile({ status }: { status: JobStatus }) {
   return (
-    // div, not <button>: audio players render inside and nested interactive
-    // elements are invalid HTML
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onOpen(job.jobId)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") onOpen(job.jobId);
-      }}
-      className="group/card w-fit max-w-full cursor-pointer overflow-hidden rounded-2xl border bg-card text-left transition-colors hover:border-foreground/30"
-    >
-      {job.status === "finished" && job.video ? (
-        <video
-          src={job.video}
-          preload="metadata"
-          muted
-          playsInline
-          tabIndex={-1}
-          onLoadedMetadata={onMediaLoad}
-          className="pointer-events-none max-h-96 w-auto max-w-full bg-black"
-        />
-      ) : job.status === "finished" && job.image ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={job.image}
-          alt={job.label || "generated image"}
-          onLoad={onMediaLoad}
-          className="max-h-96 w-auto max-w-full bg-black"
-        />
-      ) : job.status === "finished" && job.audio ? (
-        <div className="flex min-w-72 items-center gap-3 px-4 pt-4">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            audio
+    <div className="overflow-hidden rounded-lg border border-primary/40 bg-card">
+      <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-black/40">
+        <span className="size-8 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+        {status.status === "processing" ? (
+          <span className="font-mono text-sm tabular-nums text-foreground/90">
+            {status.progress}%
           </span>
-          <audio
-            src={job.audio}
-            controls
-            className="w-full"
-            onClick={(event) => event.stopPropagation()}
-          />
-        </div>
-      ) : (
-        <div className="flex min-w-72 items-center px-4 pt-4">
-          <JobStatusBadge status={job.status} />
-        </div>
-      )}
-      <div className="flex items-center justify-between gap-6 px-4 py-2.5">
-        <p className="truncate text-xs text-muted-foreground" title={job.label}>
-          {job.label || "untitled"}
+        ) : (
+          <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+            queued #{status.status === "queued" ? status.position : 1}
+          </span>
+        )}
+      </div>
+      <div className="px-3 py-2">
+        <p className="truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          {status.status === "processing" ? stageLabel(status.stage) : "waiting for the GPU"}
         </p>
-        <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">
-          {timeAgo(job.createdAt)}
-        </span>
       </div>
     </div>
   );

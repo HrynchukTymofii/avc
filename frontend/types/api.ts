@@ -69,6 +69,8 @@ export interface JobSummary {
   video?: string;
   audio?: string;
   image?: string;
+  /** talking_head only: true = narration-only job (Voice Over tab). */
+  voiceOnly?: boolean;
 }
 
 export interface JobListResponse {

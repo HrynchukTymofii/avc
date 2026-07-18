@@ -51,8 +51,13 @@ export function RecentJobs({ kind, refreshKey = 0 }: RecentJobsProps) {
     <section className="space-y-3">
       <RecentHeader onRefresh={refresh} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {jobs.map((job, index) => (
-          <JobCard key={job.jobId} job={job} index={index} onOpen={setOpenJobId} />
+        {jobs.map((job) => (
+          <JobCard
+            key={job.jobId}
+            job={job}
+            onOpen={setOpenJobId}
+            onChanged={() => void refresh()}
+          />
         ))}
       </div>
       <JobDetailDialog

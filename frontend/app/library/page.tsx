@@ -57,7 +57,7 @@ export default function LibraryPage() {
             type="button"
             onClick={() => setFilter(option.kind)}
             className={cn(
-              "rounded-full border px-4 py-1.5 font-mono text-xs uppercase tracking-widest transition-colors",
+              "rounded-lg border px-4 py-1.5 font-mono text-xs uppercase tracking-widest transition-colors",
               filter === option.kind
                 ? "border-transparent bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:border-foreground/25 hover:text-foreground",
@@ -88,9 +88,17 @@ export default function LibraryPage() {
           library.
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {jobs.map((job, index) => (
-            <JobCard key={job.jobId} job={job} index={index} onOpen={setOpenJobId} />
+        <div
+          className="grid gap-3"
+          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}
+        >
+          {jobs.map((job) => (
+            <JobCard
+              key={job.jobId}
+              job={job}
+              onOpen={setOpenJobId}
+              onChanged={() => void refresh()}
+            />
           ))}
         </div>
       )}

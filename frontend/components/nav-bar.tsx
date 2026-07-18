@@ -1,6 +1,19 @@
 "use client";
 
-import { UserRoundIcon } from "lucide-react";
+import {
+  ClapperboardIcon,
+  FilmIcon,
+  ImageIcon,
+  LayoutGridIcon,
+  MicIcon,
+  PaletteIcon,
+  PersonStandingIcon,
+  ScanFaceIcon,
+  SparklesIcon,
+  UserRoundIcon,
+  Wand2Icon,
+  ZapIcon,
+} from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -10,9 +23,13 @@ import { AUTH_ENABLED, getCredits } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { CreditsResponse } from "@/types/api";
 
+type NavIcon = React.ComponentType<{ className?: string }>;
+
 interface NavItem {
   label: string;
+  desc: string;
   href: string;
+  icon: NavIcon;
   premium?: boolean;
 }
 
@@ -29,21 +46,71 @@ const GROUPS: NavGroup[] = [
     label: "Voice Over",
     href: "/voice",
     paths: ["/voice"],
-    items: [{ label: "Narration — S2 Pro voice clone", href: "/voice" }],
+    items: [
+      {
+        label: "Voice Over Studio",
+        desc: "Narration with an S2 Pro voice clone",
+        href: "/voice",
+        icon: MicIcon,
+      },
+    ],
   },
   {
     label: "Video",
     href: "/talking-head",
     paths: ["/talking-head", "/broll", "/full-video"],
     items: [
-      { label: "Full video — tagged script assembler", href: "/full-video" },
-      { label: "Talking head — lip-sync", href: "/talking-head?model=musetalk" },
-      { label: "Talking head — animated", href: "/talking-head?model=musetalk-animate" },
-      { label: "Talking head — full motion (S2V 14B)", href: "#", premium: true },
-      { label: "B-roll — Wan2.2 5B", href: "/broll?model=wan-5b" },
-      { label: "B-roll — A14B high quality", href: "#", premium: true },
-      { label: "Character video — Animate 14B", href: "#", premium: true },
-      { label: "Upscale video — Real-ESRGAN", href: "/upscale" },
+      {
+        label: "Full Video",
+        desc: "Tagged script → finished video with scenes",
+        href: "/full-video",
+        icon: ClapperboardIcon,
+      },
+      {
+        label: "Talking Head",
+        desc: "Lip-sync a portrait to your script",
+        href: "/talking-head?model=musetalk",
+        icon: UserRoundIcon,
+      },
+      {
+        label: "Talking Head — Animated",
+        desc: "Idle motion + lip-sync, more alive",
+        href: "/talking-head?model=musetalk-animate",
+        icon: ScanFaceIcon,
+      },
+      {
+        label: "Full Motion (S2V 14B)",
+        desc: "Full-body talking video",
+        href: "#",
+        icon: SparklesIcon,
+        premium: true,
+      },
+      {
+        label: "B-Roll",
+        desc: "Short AI clips from a prompt — Wan2.2 5B",
+        href: "/broll?model=wan-5b",
+        icon: FilmIcon,
+      },
+      {
+        label: "B-Roll — A14B",
+        desc: "Higher quality motion",
+        href: "#",
+        icon: FilmIcon,
+        premium: true,
+      },
+      {
+        label: "Character Video",
+        desc: "Animate a character — Animate 14B",
+        href: "#",
+        icon: PersonStandingIcon,
+        premium: true,
+      },
+      {
+        label: "Upscale Video",
+        desc: "Sharpen and enlarge with Real-ESRGAN",
+        href: "/upscale",
+        icon: Wand2Icon,
+      },
     ],
   },
   {
@@ -51,23 +118,50 @@ const GROUPS: NavGroup[] = [
     href: "/image",
     paths: ["/image"],
     items: [
-      { label: "Wan2.2 5B — single frame", href: "/image?model=wan-5b" },
-      { label: "FLUX.1 schnell", href: "/image?model=flux-schnell" },
-      { label: "Upscale image — Real-ESRGAN", href: "/upscale" },
+      {
+        label: "Wan2.2 5B",
+        desc: "Single frame from the video model",
+        href: "/image?model=wan-5b",
+        icon: ImageIcon,
+      },
+      {
+        label: "FLUX.1 schnell",
+        desc: "Fast high-quality stills",
+        href: "/image?model=flux-schnell",
+        icon: ZapIcon,
+      },
+      {
+        label: "Upscale Image",
+        desc: "Sharpen and enlarge with Real-ESRGAN",
+        href: "/upscale",
+        icon: Wand2Icon,
+      },
     ],
   },
   {
     label: "Styles",
     href: "/lora",
     paths: ["/lora"],
-    items: [{ label: "Style Lab — train a LoRA on your images", href: "/lora" }],
+    items: [
+      {
+        label: "Style Lab",
+        desc: "Train a LoRA style on your own images",
+        href: "/lora",
+        icon: PaletteIcon,
+      },
+    ],
   },
   {
     label: "Library",
     href: "/library",
     paths: ["/library"],
     items: [
-      { label: "All generations — play, regenerate, upscale, delete", href: "/library" },
+      {
+        label: "All generations",
+        desc: "Play, download, regenerate, upscale, delete",
+        href: "/library",
+        icon: LayoutGridIcon,
+      },
     ],
   },
 ];
@@ -77,7 +171,7 @@ export function NavBar() {
 
   return (
     <header className="sticky top-0 z-40">
-      <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-6 rounded-b-3xl border-x border-b bg-background/70 pl-6 pr-3 shadow-lg shadow-black/30 backdrop-blur-xl">
+      <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-6 rounded-b-xl border-x border-b bg-background/70 pl-6 pr-3 shadow-lg shadow-black/30 backdrop-blur-xl">
         <Link href="/talking-head" className="flex items-center gap-2.5">
           <span className="rec-dot" aria-hidden />
           <span className="font-heading text-[15px] font-semibold tracking-tight">
@@ -90,7 +184,7 @@ export function NavBar() {
               <Link
                 href={group.href}
                 className={cn(
-                  "inline-block rounded-full px-3.5 py-1.5 font-mono text-xs uppercase tracking-widest transition-colors",
+                  "inline-block rounded-md px-3.5 py-1.5 font-mono text-xs uppercase tracking-widest transition-colors",
                   group.paths.includes(pathname)
                     ? "bg-primary/15 text-foreground"
                     : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
@@ -98,30 +192,48 @@ export function NavBar() {
               >
                 {group.label}
               </Link>
-              {/* pt-3 bridges the gap to the floating bar so hover survives the trip */}
-              <div className="invisible absolute left-0 top-full z-50 pt-3 opacity-0 transition-opacity duration-100 group-hover:visible group-hover:opacity-100">
-                <div className="min-w-64 rounded-2xl border bg-popover/90 p-1.5 shadow-xl shadow-black/30 backdrop-blur-xl">
-                  {group.items.map((item) =>
-                    item.premium ? (
+              {/* pt-2 bridges the gap to the bar so hover survives the trip */}
+              <div className="invisible absolute left-0 top-full z-50 pt-2 opacity-0 transition-opacity duration-100 group-hover:visible group-hover:opacity-100">
+                <div className="w-80 rounded-xl border bg-popover/95 p-2 shadow-xl shadow-black/40 backdrop-blur-xl">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    const row = (
+                      <>
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-secondary/60">
+                          <Icon className="size-4" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                            <span className="truncate">{item.label}</span>
+                            {item.premium && (
+                              <span className="shrink-0 rounded border px-1.5 py-px font-mono text-[8px] uppercase tracking-wider text-muted-foreground">
+                                premium
+                              </span>
+                            )}
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {item.desc}
+                          </span>
+                        </span>
+                      </>
+                    );
+                    return item.premium ? (
                       <div
                         key={item.label}
-                        className="flex cursor-default items-center justify-between gap-3 rounded-xl px-3 py-2 text-xs text-muted-foreground/60"
+                        className="flex cursor-default items-center gap-3 rounded-lg px-2 py-2 opacity-55"
                       >
-                        <span>{item.label}</span>
-                        <span className="shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider">
-                          premium
-                        </span>
+                        {row}
                       </div>
                     ) : (
                       <Link
                         key={item.label}
                         href={item.href}
-                        className="block rounded-xl px-3 py-2 text-xs text-foreground/90 transition-colors hover:bg-secondary"
+                        className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-secondary"
                       >
-                        {item.label}
+                        {row}
                       </Link>
-                    ),
-                  )}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -152,7 +264,7 @@ function AccountMenu() {
       <div className="ml-auto">
         <Link
           href="/sign-in"
-          className="inline-block rounded-full bg-primary/15 px-4 py-1.5 font-mono text-xs uppercase tracking-widest text-foreground transition-colors hover:bg-primary/25"
+          className="inline-block rounded-lg bg-primary/15 px-4 py-1.5 font-mono text-xs uppercase tracking-widest text-foreground transition-colors hover:bg-primary/25"
         >
           Sign in
         </Link>
@@ -172,9 +284,9 @@ function AccountMenu() {
     <div className="group relative ml-auto">
       <button
         type="button"
-        className="flex items-center gap-2.5 rounded-full border bg-secondary/60 py-1 pl-1 pr-4 transition-colors hover:bg-secondary"
+        className="flex items-center gap-2.5 rounded-lg border bg-secondary/60 py-1 pl-1 pr-4 transition-colors hover:bg-secondary"
       >
-        <span className="flex size-7 items-center justify-center rounded-full bg-linear-to-b from-primary to-[oklch(0.52_0.18_262)]">
+        <span className="flex size-7 items-center justify-center rounded-md bg-linear-to-b from-primary to-[oklch(0.52_0.18_262)]">
           <UserRoundIcon className="size-3.5 text-primary-foreground" />
         </span>
         <span className="hidden text-left sm:block">
@@ -184,8 +296,8 @@ function AccountMenu() {
           </span>
         </span>
       </button>
-      <div className="invisible absolute right-0 top-full z-50 pt-3 opacity-0 transition-opacity duration-100 group-hover:visible group-hover:opacity-100">
-        <div className="min-w-48 rounded-2xl border bg-popover/90 p-1.5 shadow-xl shadow-black/30 backdrop-blur-xl">
+      <div className="invisible absolute right-0 top-full z-50 pt-2 opacity-0 transition-opacity duration-100 group-hover:visible group-hover:opacity-100">
+        <div className="min-w-48 rounded-xl border bg-popover/95 p-1.5 shadow-xl shadow-black/40 backdrop-blur-xl">
           <div className="px-3 py-2">
             <p className="truncate text-xs text-foreground/90">{name}</p>
             <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -194,7 +306,7 @@ function AccountMenu() {
           </div>
           <Link
             href="/library"
-            className="block rounded-xl px-3 py-2 text-xs text-foreground/90 transition-colors hover:bg-secondary"
+            className="block rounded-lg px-3 py-2 text-xs text-foreground/90 transition-colors hover:bg-secondary"
           >
             My library
           </Link>
@@ -202,7 +314,7 @@ function AccountMenu() {
             <button
               type="button"
               onClick={() => signOut({ callbackUrl: "/sign-in" })}
-              className="block w-full rounded-xl px-3 py-2 text-left text-xs text-foreground/90 transition-colors hover:bg-secondary"
+              className="block w-full rounded-lg px-3 py-2 text-left text-xs text-foreground/90 transition-colors hover:bg-secondary"
             >
               Sign out
             </button>

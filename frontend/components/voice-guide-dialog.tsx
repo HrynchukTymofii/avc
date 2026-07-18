@@ -18,17 +18,19 @@ Rules for the script:
 - Short sentences. One idea per sentence. Conversational, like talking to one person.
 - Write out every number, unit, date and abbreviation the way it should be spoken ("twenty five percent", not "25%").
 - End sentences with normal punctuation. Use commas for short pauses and "..." for a hesitation.
+- You may insert [pause] for a beat of silence, or [pause:2] for a two-second silence, between thoughts.
 - No intro like "Here's the script" — output the narration text only.`;
 
-/** The marks the S2 narration engine responds to. Pacing comes from
- * punctuation (scripts are synthesized sentence-group by sentence-group with a
- * short silence between groups); tone markers are model-dependent extras. */
+/** The marks the narration engine actually honors. [pause] markers are cut out
+ * of the text and replaced with real silence; punctuation drives the delivery
+ * of everything else. */
 const PACING_MARKS: { mark: string; effect: string }[] = [
+  { mark: "[pause]", effect: "a beat of silence (0.6 s) — the marker is never spoken" },
+  { mark: "[pause:2]", effect: "exactly that many seconds of silence (up to 10)" },
   { mark: ",", effect: "short pause inside a sentence" },
   { mark: ". ! ?", effect: "full stop — ends the phrase with matching intonation" },
   { mark: "…", effect: "hesitation / trailing off" },
-  { mark: "New sentence", effect: "a brief silence is inserted between sentence groups" },
-  { mark: "CAPITALS", effect: "slight emphasis on a word (use sparingly)" },
+  { mark: "New sentence", effect: "a brief natural gap between sentence groups" },
 ];
 
 const TONE_MARKS: { mark: string; effect: string }[] = [

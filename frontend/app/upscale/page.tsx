@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 
 import { GenerationFeed } from "@/components/generation-feed";
-import { MediaDropzone } from "@/components/media-dropzone";
 import { ModelSelect } from "@/components/model-select";
-import { ComposerControl, Studio, StudioComposer } from "@/components/studio";
+import {
+  ComposerAttach,
+  ComposerControl,
+  Studio,
+  StudioComposer,
+} from "@/components/studio";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { submitUpscale } from "@/lib/api";
+import { upscaleCost } from "@/lib/pricing";
 import { isTerminal, useJobPolling } from "@/lib/use-job-polling";
 
 const SCALES = [
@@ -24,6 +29,14 @@ const SCALES = [
 ] as const;
 
 export default function UpscalePage() {
+  return (
+    <Suspense fallback={null}>
+      <UpscaleStudio />
+    </Suspense>
+  );
+}
+
+function UpscaleStudio() {
   const [file, setFile] = useState<File | null>(null);
   const [model, setModel] = useState("");
   const [scale, setScale] = useState<string>("4");
@@ -34,6 +47,7 @@ export default function UpscalePage() {
 
   const status = useJobPolling(jobId);
   const busy = submitting || (jobId !== null && !isTerminal(status));
+  const cost = upscaleCost(file?.type.startsWith("video/") ? "video" : "image");
 
   const terminalNotified = useRef<string | null>(null);
   useEffect(() => {
@@ -70,19 +84,24 @@ export default function UpscalePage() {
         refreshKey={refreshKey}
         status={status}
         emptyTitle="Upscaler"
-        emptyHint="Drop an image or a short video below and enlarge it with Real-ESRGAN. Tip: you can also upscale any generation straight from the Library — no re-upload."
+        emptyHint="Add an image or a short video with + and enlarge it with Real-ESRGAN. Tip: you can also upscale any generation straight from its tile in the Library."
       />
 
       <StudioComposer>
-        <MediaDropzone
-          label="Image or video"
-          hint="PNG/JPEG ≤ 20 MB · MP4/MOV/WebM ≤ 200 MB, ≤ 2 min"
-          file={file}
-          onChange={setFile}
-          maxImageMb={20}
-          maxVideoMb={200}
-          disabled={busy}
-        />
+        <div className="flex items-center gap-3">
+          <ComposerAttach
+            label="Image or video to upscale"
+            file={file}
+            onChange={setFile}
+            accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime,video/webm"
+            disabled={busy}
+          />
+          <p className="flex-1 text-sm text-muted-foreground">
+            {file
+              ? `${file.name} · ${(file.size / 1_000_000).toFixed(1)} MB`
+              : "PNG/JPEG ≤ 20 MB · MP4/MOV/WebM ≤ 200 MB, ≤ 2 min"}
+          </p>
+        </div>
         {submitError && (
           <Alert variant="destructive" className="my-2">
             <AlertDescription>{submitError}</AlertDescription>
@@ -114,11 +133,12 @@ export default function UpscalePage() {
             </Select>
           </ComposerControl>
           <Button
-            className="ml-auto font-mono text-xs uppercase tracking-widest"
+            size="lg"
+            className="ml-auto rounded-lg font-mono text-xs uppercase tracking-widest"
             onClick={handleSubmit}
             disabled={busy || !file}
           >
-            {busy ? "Upscaling…" : "Upscale"}
+            {busy ? "Upscaling…" : `Upscale · ${cost} cr`}
           </Button>
         </div>
       </StudioComposer>

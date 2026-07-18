@@ -1,5 +1,6 @@
 "use client";
 
+import { PaletteIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -21,12 +22,14 @@ interface StyleSelectProps {
   disabled?: boolean;
   /** Bare small select for the composer bar — no label, no caption. */
   compact?: boolean;
+  /** Bigger composer button with a visual tile for the chosen style. */
+  tile?: boolean;
 }
 
 /** Trained style (LoRA) picker fed by /api/loras. Styles apply to the Wan2.2 5B
  * engine only — the backend rejects other models, and the trigger word is added
  * to the prompt automatically. */
-export function StyleSelect({ value, onChange, disabled, compact }: StyleSelectProps) {
+export function StyleSelect({ value, onChange, disabled, compact, tile }: StyleSelectProps) {
   const [styles, setStyles] = useState<LoraStyle[] | null>(null);
 
   useEffect(() => {
@@ -57,8 +60,26 @@ export function StyleSelect({ value, onChange, disabled, compact }: StyleSelectP
     >
       <SelectTrigger
         size={compact ? "sm" : "default"}
-        className={compact ? "max-w-44" : "w-full"}
+        className={
+          tile
+            ? "h-12 max-w-52 gap-2 rounded-lg pl-1.5"
+            : compact
+              ? "max-w-44"
+              : "w-full"
+        }
       >
+        {tile && (
+          <span
+            aria-hidden
+            className="flex size-9 shrink-0 items-center justify-center rounded-md bg-linear-to-br from-primary/80 to-[oklch(0.55_0.22_310)] font-heading text-sm font-bold text-white"
+          >
+            {selected ? (
+              selected.name.charAt(0).toUpperCase()
+            ) : (
+              <PaletteIcon className="size-4" />
+            )}
+          </span>
+        )}
         <SelectValue placeholder={styles === null ? "Loading styles…" : undefined} />
       </SelectTrigger>
       <SelectContent>
@@ -75,7 +96,7 @@ export function StyleSelect({ value, onChange, disabled, compact }: StyleSelectP
     </Select>
   );
 
-  if (compact) return select;
+  if (compact || tile) return select;
 
   return (
     <div className="space-y-1.5">

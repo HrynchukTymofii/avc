@@ -1,13 +1,11 @@
 "use client";
 
-import { SlidersHorizontalIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 
-import { FileDropzone } from "@/components/file-dropzone";
 import { GenerationFeed } from "@/components/generation-feed";
 import { ModelSelect } from "@/components/model-select";
 import {
-  AdvancedPanel,
+  ComposerAttach,
   ComposerControl,
   Studio,
   StudioComposer,
@@ -17,14 +15,25 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { submitTalkingHead } from "@/lib/api";
+import { talkingHeadCost } from "@/lib/pricing";
 import { isTerminal, useJobPolling } from "@/lib/use-job-polling";
 
 export default function TalkingHeadPage() {
+  return (
+    <Suspense fallback={null}>
+      <TalkingHeadStudio />
+    </Suspense>
+  );
+}
+
+// stable reference — an inline arrow would refetch the feed on every render
+const withoutVoiceOvers = (job: { voiceOnly?: boolean }) => job.voiceOnly !== true;
+
+function TalkingHeadStudio() {
   const [avatar, setAvatar] = useState<File | null>(null);
   const [model, setModel] = useState("");
   const [script, setScript] = useState("");
   const [voice, setVoice] = useState<string>("");
-  const [panelOpen, setPanelOpen] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -32,6 +41,7 @@ export default function TalkingHeadPage() {
 
   const status = useJobPolling(jobId);
   const busy = submitting || (jobId !== null && !isTerminal(status));
+  const cost = talkingHeadCost(model, script);
 
   const terminalNotified = useRef<string | null>(null);
   useEffect(() => {
@@ -70,44 +80,39 @@ export default function TalkingHeadPage() {
         kind="talking_head"
         refreshKey={refreshKey}
         status={status}
+        // narration-only jobs live on the Voice Over tab
+        filterJobs={withoutVoiceOvers}
         emptyTitle="Talking Head Studio"
-        emptyHint="Paste your script below, then add a portrait and pick a voice under Avatar & voice — you get a lip-synced video. Roughly 1–3 minutes of processing per minute of script."
+        emptyHint="Paste your script below, add a portrait with +, pick a voice — you get a lip-synced video. Roughly 1–3 minutes of processing per minute of script."
       />
 
-      <AdvancedPanel
-        open={panelOpen}
-        onClose={() => setPanelOpen(false)}
-        title="Avatar & voice"
-      >
-        <FileDropzone
-          label="Avatar"
-          hint="PNG / JPEG · clear front-facing portrait"
-          file={avatar}
-          onChange={setAvatar}
-          disabled={busy}
-        />
-        <VoiceSelect value={voice} onChange={setVoice} disabled={busy} />
-      </AdvancedPanel>
-
       <StudioComposer>
-        <Textarea
-          value={script}
-          onChange={(event) => setScript(event.target.value)}
-          placeholder="Paste the words your avatar should speak…"
-          className="max-h-56 min-h-16 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
-          disabled={busy}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-              void handleSubmit();
-            }
-          }}
-        />
+        <div className="flex items-start gap-3">
+          <ComposerAttach
+            label="Avatar — clear front-facing portrait"
+            file={avatar}
+            onChange={setAvatar}
+            disabled={busy}
+          />
+          <Textarea
+            value={script}
+            onChange={(event) => setScript(event.target.value)}
+            placeholder="Paste the words your avatar should speak… add the portrait with +"
+            className="max-h-56 min-h-16 flex-1 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+            disabled={busy}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                void handleSubmit();
+              }
+            }}
+          />
+        </div>
         {submitError && (
           <Alert variant="destructive" className="mb-2">
             <AlertDescription>{submitError}</AlertDescription>
           </Alert>
         )}
-        <div className="flex flex-wrap items-center gap-2 border-t pt-2.5">
+        <div className="mt-1 flex flex-wrap items-center gap-2 border-t pt-2.5">
           <ComposerControl>
             <ModelSelect
               kind="talking_head"
@@ -117,25 +122,21 @@ export default function TalkingHeadPage() {
               compact
             />
           </ComposerControl>
-          <Button
-            size="sm"
-            variant={avatar ? "secondary" : "ghost"}
-            onClick={() => setPanelOpen((open) => !open)}
-          >
-            <SlidersHorizontalIcon className="size-3.5" />
-            {avatar ? "Avatar set" : "Avatar & voice"}
-          </Button>
+          <ComposerControl label="Voice">
+            <VoiceSelect value={voice} onChange={setVoice} disabled={busy} compact />
+          </ComposerControl>
           {!avatar && script.trim() !== "" && (
             <span className="text-xs text-muted-foreground">
-              Add a portrait in “Avatar &amp; voice” to generate.
+              Add a portrait with the + button to generate.
             </span>
           )}
           <Button
-            className="ml-auto font-mono text-xs uppercase tracking-widest"
+            size="lg"
+            className="ml-auto rounded-lg font-mono text-xs uppercase tracking-widest"
             onClick={handleSubmit}
             disabled={busy || !canSubmit}
           >
-            {busy ? "Generating…" : "Generate"}
+            {busy ? "Generating…" : `Generate · ${cost} cr`}
           </Button>
         </div>
       </StudioComposer>

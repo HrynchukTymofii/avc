@@ -1,13 +1,11 @@
 "use client";
 
-import { SlidersHorizontalIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 
-import { FileDropzone } from "@/components/file-dropzone";
 import { GenerationFeed } from "@/components/generation-feed";
 import { ModelSelect } from "@/components/model-select";
 import {
-  AdvancedPanel,
+  ComposerAttach,
   ComposerControl,
   Studio,
   StudioComposer,
@@ -24,17 +22,25 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { submitBroll } from "@/lib/api";
+import { brollCost } from "@/lib/pricing";
 import { isTerminal, useJobPolling } from "@/lib/use-job-polling";
 
 const DURATIONS = [3, 4, 5] as const;
 
 export default function BrollPage() {
+  return (
+    <Suspense fallback={null}>
+      <BrollStudio />
+    </Suspense>
+  );
+}
+
+function BrollStudio() {
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState<string>("5");
   const [image, setImage] = useState<File | null>(null);
   const [model, setModel] = useState("");
   const [lora, setLora] = useState("");
-  const [panelOpen, setPanelOpen] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -42,6 +48,7 @@ export default function BrollPage() {
 
   const status = useJobPolling(jobId);
   const busy = submitting || (jobId !== null && !isTerminal(status));
+  const cost = brollCost(model);
 
   const terminalNotified = useRef<string | null>(null);
   useEffect(() => {
@@ -81,38 +88,36 @@ export default function BrollPage() {
         refreshKey={refreshKey}
         status={status}
         emptyTitle="B-Roll Generator"
-        emptyHint="Describe the shot below — short AI clips for your edit. A 5-second clip takes roughly 3–8 minutes, so queue a batch and collect the results here."
+        emptyHint="Describe the shot below — short AI clips for your edit. Use + to start from a reference image. A 5-second clip takes roughly 3–8 minutes."
       />
 
-      <AdvancedPanel open={panelOpen} onClose={() => setPanelOpen(false)} title="Advanced">
-        <FileDropzone
-          label="Reference image (optional)"
-          hint="Animates from this frame"
-          file={image}
-          onChange={setImage}
-          disabled={busy}
-        />
-      </AdvancedPanel>
-
       <StudioComposer>
-        <Textarea
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-          placeholder="Describe the shot… e.g. slow dolly across a foggy harbour at dawn, cinematic"
-          className="max-h-48 min-h-16 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
-          disabled={busy}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-              void handleSubmit();
-            }
-          }}
-        />
+        <div className="flex items-start gap-3">
+          <ComposerAttach
+            label="Reference image (animates from this frame)"
+            file={image}
+            onChange={setImage}
+            disabled={busy}
+          />
+          <Textarea
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            placeholder="Describe the shot… e.g. slow dolly across a foggy harbour at dawn, cinematic"
+            className="max-h-48 min-h-16 flex-1 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+            disabled={busy}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                void handleSubmit();
+              }
+            }}
+          />
+        </div>
         {submitError && (
           <Alert variant="destructive" className="mb-2">
             <AlertDescription>{submitError}</AlertDescription>
           </Alert>
         )}
-        <div className="flex flex-wrap items-center gap-2 border-t pt-2.5">
+        <div className="mt-1 flex flex-wrap items-center gap-2 border-t pt-2.5">
           <ComposerControl>
             <ModelSelect kind="broll" value={model} onChange={setModel} disabled={busy} compact />
           </ComposerControl>
@@ -137,27 +142,19 @@ export default function BrollPage() {
               </SelectContent>
             </Select>
           </ComposerControl>
-          {model === "wan-5b" && (
-            <ComposerControl>
-              <StyleSelect value={lora} onChange={setLora} disabled={busy} compact />
-            </ComposerControl>
-          )}
-          <Button
-            size="sm"
-            variant={image ? "secondary" : "ghost"}
-            onClick={() => setPanelOpen((open) => !open)}
-            title="Reference image"
-          >
-            <SlidersHorizontalIcon className="size-3.5" />
-            {image ? "1 ref" : "Advanced"}
-          </Button>
-          <Button
-            className="ml-auto font-mono text-xs uppercase tracking-widest"
-            onClick={handleSubmit}
-            disabled={busy || !prompt.trim()}
-          >
-            {busy ? "Generating…" : "Generate"}
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            {model === "wan-5b" && (
+              <StyleSelect value={lora} onChange={setLora} disabled={busy} tile />
+            )}
+            <Button
+              size="lg"
+              className="rounded-lg font-mono text-xs uppercase tracking-widest"
+              onClick={handleSubmit}
+              disabled={busy || !prompt.trim()}
+            >
+              {busy ? "Generating…" : `Generate · ${cost} cr`}
+            </Button>
+          </div>
         </div>
       </StudioComposer>
     </Studio>
