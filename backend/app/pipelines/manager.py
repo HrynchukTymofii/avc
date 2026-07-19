@@ -12,6 +12,7 @@ so the eviction policy is fully testable without a GPU.
 from __future__ import annotations
 
 import asyncio
+import gc
 import logging
 import time
 from collections.abc import AsyncIterator, Callable, Sequence
@@ -34,6 +35,12 @@ def _torch_free_vram_gb() -> float:
 
 
 def _torch_clear_cuda_cache() -> None:
+    # Diffusers pipelines contain reference cycles, so dropping the last
+    # reference in unload() does NOT free their tensors immediately — they wait
+    # for the cyclic GC, and empty_cache() can only return memory of tensors
+    # that are already collected. Without the explicit collect, evicting a
+    # pipeline leaves most of its VRAM occupied by uncollected garbage.
+    gc.collect()
     try:
         import torch
     except ImportError:
@@ -128,6 +135,11 @@ class ModelManager:
         while self._probe() < self._needed_free_gb(target):
             victim = self._pick_victim(exclude=target.name)
             if victim is None:
+                # Last resort before failing the job: stray tensors may be held
+                # by uncollected garbage (cycles, a failed job's traceback).
+                self._clear_cache()
+                if self._probe() >= self._needed_free_gb(target):
+                    return
                 raise InsufficientVRAMError(
                     f"pipeline {target.name!r} needs "
                     f"{self._needed_free_gb(target):.1f} GB free VRAM but only "
