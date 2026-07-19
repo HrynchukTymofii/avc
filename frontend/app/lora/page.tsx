@@ -24,6 +24,7 @@ const STEP_PRESETS = [
   { value: "1000", label: "Fast · 1000 steps (~1 h)" },
   { value: "2000", label: "Standard · 2000 steps (~1–2 h)" },
   { value: "3000", label: "Thorough · 3000 steps (~2–3 h)" },
+  { value: "4000", label: "Maximum · 4000 steps (~3–4 h)" },
 ] as const;
 
 const TRIGGER_RE = /^[A-Za-z0-9_]{2,30}$/;

@@ -91,6 +91,12 @@ CATALOG: tuple[Engine, ...] = (
         "flux-schnell", "FLUX.1 schnell", JobKind.IMAGE,
         "standard", "2 / image", "flux",
     ),
+    # Reference-image editing: keeps a character's identity while changing pose,
+    # expression, or viewpoint. Requires an uploaded reference image.
+    Engine(
+        "flux-kontext", "FLUX.1 Kontext — edit from reference", JobKind.IMAGE,
+        "standard", "4 / image", "flux-kontext",
+    ),
 )
 
 

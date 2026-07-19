@@ -46,7 +46,8 @@ def broll_cost(engine: Engine) -> int:
 
 
 def image_cost(engine: Engine, count: int) -> int:
-    per_image = 2 if engine.id == "flux-schnell" else 1
+    # Kontext runs 28 steps on a 12B transformer — far heavier than schnell's 4.
+    per_image = {"flux-schnell": 2, "flux-kontext": 4}.get(engine.id, 1)
     return per_image * count
 
 

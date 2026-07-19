@@ -62,6 +62,10 @@ class ImageParams:
     lora_id: str | None = None
     lora_path: Path | None = None
     lora_scale: float = 1.0
+    # Reference-image editing (flux-kontext engine only): the uploaded image the
+    # edit starts from, and how strongly the prompt pulls away from it.
+    image_path: Path | None = None
+    guidance: float = 2.5
 
 
 @dataclass
@@ -155,6 +159,8 @@ def params_from_dict(kind: JobKind, data: dict[str, Any]) -> JobParams:
             lora_id=data.get("lora_id") or None,
             lora_path=path(data.get("lora_path")),
             lora_scale=float(data.get("lora_scale", 1.0)),
+            image_path=path(data.get("image_path")),
+            guidance=float(data.get("guidance", 2.5)),
         )
     if kind is JobKind.FULL_VIDEO:
         return FullVideoParams(

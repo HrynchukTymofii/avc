@@ -26,7 +26,8 @@ export function brollCost(model: string): number {
 }
 
 export function imageCost(model: string, count: number): number {
-  return (model === "flux-schnell" ? 2 : 1) * count;
+  const perImage = model === "flux-kontext" ? 4 : model === "flux-schnell" ? 2 : 1;
+  return perImage * count;
 }
 
 export function upscaleCost(media: "image" | "video"): number {

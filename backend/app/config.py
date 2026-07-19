@@ -81,6 +81,8 @@ class Settings(BaseSettings):
     # FLUX is ~34 GB in bf16 — parking it in CPU RAM next to Wan would blow the
     # 64 GB host, so it drops to disk when evicted (page cache keeps reloads fast).
     flux_offload: OffloadPolicy = "unload"
+    # Kontext is FLUX-dev-sized (~34 GB bf16) — same RAM constraint as FLUX.
+    kontext_offload: OffloadPolicy = "unload"
     # Premium (H100-tier) engines: registers their pipelines and lists them as
     # selectable. Leave false on the L40S — the 14B/A14B models don't fit.
     premium_enabled: bool = False

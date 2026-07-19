@@ -59,6 +59,15 @@ download Wan-AI/Wan2.2-TI2V-5B-Diffusers "$MODELS_DIR/wan2.2-ti2v-5b"
 # --- FLUX.1-schnell, image generation (~34 GB, Apache 2.0) ---------------------------
 download black-forest-labs/FLUX.1-schnell "$MODELS_DIR/flux.1-schnell"
 
+# --- FLUX.1 Kontext dev, reference-image editing (~34 GB, license-gated) -------------
+# Accept the license at https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev
+# (non-commercial dev license) and set HF_TOKEN before running.
+download black-forest-labs/FLUX.1-Kontext-dev "$MODELS_DIR/flux.1-kontext-dev" || {
+    echo "error: FLUX.1-Kontext-dev download failed. Most likely the license was" >&2
+    echo "not accepted or HF_TOKEN is missing — see the comment above." >&2
+    exit 1
+}
+
 # --- Real-ESRGAN upscaler weights (~80 MB, GitHub releases — not on HF) --------------
 RESRGAN_DIR="$MODELS_DIR/realesrgan"
 mkdir -p "$RESRGAN_DIR"

@@ -105,6 +105,7 @@ export async function submitBroll(input: {
   image?: File | null;
   model?: string;
   lora?: string;
+  loraScale?: number;
 }): Promise<JobCreatedResponse> {
   const form = new FormData();
   form.append("prompt", input.prompt);
@@ -112,6 +113,9 @@ export async function submitBroll(input: {
   if (input.image) form.append("image", input.image);
   if (input.model) form.append("model", input.model);
   if (input.lora) form.append("lora", input.lora);
+  if (input.lora && input.loraScale !== undefined) {
+    form.append("lora_scale", String(input.loraScale));
+  }
   return handle(await apiFetch("/api/broll", { method: "POST", body: form }));
 }
 
@@ -121,6 +125,10 @@ export async function submitImage(input: {
   model?: string;
   count?: number;
   lora?: string;
+  loraScale?: number;
+  /** Reference image for the flux-kontext engine (identity-preserving edits). */
+  image?: File | null;
+  guidance?: number;
 }): Promise<JobCreatedResponse> {
   const form = new FormData();
   form.append("prompt", input.prompt);
@@ -128,6 +136,13 @@ export async function submitImage(input: {
   if (input.model) form.append("model", input.model);
   if (input.count && input.count > 1) form.append("count", String(input.count));
   if (input.lora) form.append("lora", input.lora);
+  if (input.lora && input.loraScale !== undefined) {
+    form.append("lora_scale", String(input.loraScale));
+  }
+  if (input.image) form.append("image", input.image);
+  if (input.image && input.guidance !== undefined) {
+    form.append("guidance", String(input.guidance));
+  }
   return handle(await apiFetch("/api/image", { method: "POST", body: form }));
 }
 

@@ -10,7 +10,7 @@ import {
   Studio,
   StudioComposer,
 } from "@/components/studio";
-import { StyleSelect } from "@/components/style-select";
+import { StyleScaleSelect, StyleSelect } from "@/components/style-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +41,7 @@ function BrollStudio() {
   const [image, setImage] = useState<File | null>(null);
   const [model, setModel] = useState("");
   const [lora, setLora] = useState("");
+  const [loraScale, setLoraScale] = useState("1.0");
   const [jobId, setJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -70,6 +71,7 @@ function BrollStudio() {
         image,
         model: model || undefined,
         lora: model === "wan-5b" ? lora || undefined : undefined,
+        loraScale: model === "wan-5b" && lora ? Number(loraScale) : undefined,
       });
       setJobId(response.jobId);
       setPrompt("");
@@ -146,7 +148,12 @@ function BrollStudio() {
           </ComposerControl>
           <div className="ml-auto flex items-center gap-2">
             {model === "wan-5b" && (
-              <StyleSelect value={lora} onChange={setLora} disabled={busy} tile />
+              <>
+                <StyleSelect value={lora} onChange={setLora} disabled={busy} tile />
+                {lora && (
+                  <StyleScaleSelect value={loraScale} onChange={setLoraScale} disabled={busy} />
+                )}
+              </>
             )}
             <Button
               size="lg"

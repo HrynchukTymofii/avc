@@ -16,6 +16,41 @@ import type { LoraStyle } from "@/types/api";
 
 const NONE = "__none__";
 
+// Allowed lora_scale presets (backend accepts 0.1–2.0; 1.0 = as trained).
+const SCALES = ["0.6", "0.8", "1.0", "1.2", "1.5", "2.0"] as const;
+
+interface StyleScaleSelectProps {
+  value: string; // one of SCALES
+  onChange: (scale: string) => void;
+  disabled?: boolean;
+}
+
+/** Strength of the applied style (lora_scale). Higher pushes the trained look
+ * harder against the prompt; useful when a style barely shows at 1.0. */
+export function StyleScaleSelect({ value, onChange, disabled }: StyleScaleSelectProps) {
+  return (
+    <Select
+      value={value}
+      onValueChange={(next) => {
+        if (next !== null) onChange(next);
+      }}
+      disabled={disabled}
+      items={Object.fromEntries(SCALES.map((scale) => [scale, `Style ×${scale}`]))}
+    >
+      <SelectTrigger size="sm" className="max-w-32">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {SCALES.map((scale) => (
+          <SelectItem key={scale} value={scale}>
+            Style ×{scale}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 interface StyleSelectProps {
   value: string; // lora id, "" = no style
   onChange: (id: string) => void;

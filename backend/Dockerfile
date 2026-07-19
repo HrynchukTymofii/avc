@@ -122,12 +122,12 @@ RUN git clone --depth 1 --branch ${AI_TOOLKIT_REF} \
     && python3.11 -m venv /opt/trainer-venv \
     && /opt/trainer-venv/bin/pip install --no-cache-dir --upgrade pip "setuptools<81" wheel \
     && /opt/trainer-venv/bin/pip install --no-cache-dir \
-        torch==2.7.1 torchvision==0.22.1 \
+        torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
         --index-url https://download.pytorch.org/whl/cu126 \
     && /opt/trainer-venv/bin/pip install --no-cache-dir -r /opt/ai-toolkit/requirements.txt \
     # Build-time canary: the trainer venv must import its own torch and the
     # toolkit entry point must parse — fail the build, not the first training job.
-    && /opt/trainer-venv/bin/python -c "import torch; print('trainer torch', torch.__version__)" \
+    && /opt/trainer-venv/bin/python -c "import torch, torchaudio; print('trainer torch', torch.__version__)" \
     && /opt/trainer-venv/bin/python -m py_compile /opt/ai-toolkit/run.py
 
 # MuseTalk resolves paths relative to the working directory and imports its

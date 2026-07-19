@@ -213,6 +213,8 @@ async def create_image(
     count: Annotated[int, Form(ge=1, le=4)] = 1,
     lora: Annotated[str, Form()] = "",
     lora_scale: Annotated[float, Form(ge=0.1, le=2.0)] = 1.0,
+    image: Annotated[UploadFile | None, File()] = None,
+    guidance: Annotated[float, Form(ge=1.0, le=5.0)] = 2.5,
 ) -> JobCreatedResponse:
     engine = _resolve_engine(JobKind.IMAGE, model, settings)
     prompt = validate_text(prompt, field="prompt", max_chars=settings.max_prompt_chars)
@@ -222,11 +224,31 @@ async def create_image(
         raise InputValidationError(
             f"orientation must be one of {', '.join(sorted(IMAGE_SIZES))}"
         )
+    has_reference = image is not None and bool(image.filename or image.size)
+    if engine.id == "flux-kontext" and not has_reference:
+        raise InputValidationError(
+            "the Kontext engine edits an existing image — upload a reference image"
+        )
+    if has_reference and engine.id != "flux-kontext":
+        raise InputValidationError(
+            "reference images are only supported by the FLUX.1 Kontext engine"
+        )
     cost = credits.image_cost(engine, count)
     require_credits(user, cost, store)
 
+    job_id = new_job_id()
+    image_path = None
+    if has_reference:
+        assert image is not None
+        image_bytes, extension = await read_image_upload(
+            image, max_bytes=settings.max_upload_bytes, field="image"
+        )
+        image_path = settings.outputs_dir / job_id / "inputs" / f"reference{extension}"
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        image_path.write_bytes(image_bytes)
+
     job = Job(
-        id=new_job_id(),
+        id=job_id,
         kind=JobKind.IMAGE,
         params=ImageParams(
             prompt=prompt,
@@ -236,6 +258,8 @@ async def create_image(
             lora_id=style.id if style else None,
             lora_path=style.weights_path if style else None,
             lora_scale=lora_scale,
+            image_path=image_path,
+            guidance=guidance,
         ),
         label=_label(prompt),
         user_id=user.id,

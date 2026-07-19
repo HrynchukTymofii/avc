@@ -34,6 +34,15 @@ class ImageProcessor:
         pipeline_name = engine.pipeline if engine else "wan"
         count = max(1, params.count)
 
+        # Reference-image editing (Kontext): only that pipeline's generate_image
+        # accepts these kwargs, and the route guarantees the pairing.
+        reference_kwargs: dict[str, object] = {}
+        if params.image_path is not None:
+            reference_kwargs = {
+                "image_path": params.image_path,
+                "guidance": params.guidance,
+            }
+
         urls: list[str] = []
         report(0, "diffusion")
         async with self._manager.acquire(pipeline_name) as pipe:
@@ -54,6 +63,7 @@ class ImageProcessor:
                         out_path=self._settings.outputs_dir / job.id / name,
                         on_progress=on_progress,
                         seed=seed,
+                        **reference_kwargs,
                     )
                     urls.append(f"/outputs/{job.id}/{name}")
             finally:

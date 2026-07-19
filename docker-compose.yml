@@ -3,6 +3,9 @@ services:
     build: ./backend
     restart: unless-stopped
     env_file: .env
+    # PyTorch DataLoader workers exchange tensors via /dev/shm; Docker's 64MB
+    # default kills them with a bus error during LoRA training.
+    shm_size: "8gb"
     # Loopback-only: nginx (or an SSH tunnel) is the front door, never the raw port.
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8000}:8000"

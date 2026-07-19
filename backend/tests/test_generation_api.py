@@ -342,6 +342,40 @@ def test_broll_style_not_applicable_to_other_models(client: TestClient, tmp_path
     assert "cannot be applied" in response.json()["detail"]
 
 
+# ---- reference-image editing (flux-kontext) --------------------------------------
+
+
+def test_image_kontext_requires_reference(client: TestClient) -> None:
+    response = client.post(
+        "/api/image", data={"prompt": "show him from behind", "model": "flux-kontext"}
+    )
+    assert response.status_code == 422
+    assert "reference image" in response.json()["detail"]
+
+
+def test_image_reference_rejected_on_other_engines(client: TestClient) -> None:
+    response = client.post(
+        "/api/image",
+        data={"prompt": "a harbour", "model": "wan-5b"},
+        files={"image": ("ref.png", png_bytes(), "image/png")},
+    )
+    assert response.status_code == 422
+    assert "Kontext" in response.json()["detail"]
+
+
+def test_image_kontext_accepts_reference(client: TestClient) -> None:
+    response = client.post(
+        "/api/image",
+        data={"prompt": "show him from behind", "model": "flux-kontext", "guidance": "1.8"},
+        files={"image": ("ref.png", png_bytes(), "image/png")},
+    )
+    assert response.status_code == 200
+    job_id = response.json()["jobId"]
+
+    jobs = client.get("/api/jobs?kind=image").json()["jobs"]
+    assert any(job["jobId"] == job_id for job in jobs)
+
+
 def test_broll_accepts_style(client: TestClient, tmp_path: Path) -> None:
     style = install_test_style(tmp_path)
     response = client.post(

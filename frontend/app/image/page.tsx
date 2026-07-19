@@ -4,8 +4,13 @@ import { Suspense, useEffect, useRef, useState } from "react";
 
 import { GenerationFeed } from "@/components/generation-feed";
 import { ModelSelect } from "@/components/model-select";
-import { ComposerControl, Studio, StudioComposer } from "@/components/studio";
-import { StyleSelect } from "@/components/style-select";
+import {
+  ComposerAttach,
+  ComposerControl,
+  Studio,
+  StudioComposer,
+} from "@/components/studio";
+import { StyleScaleSelect, StyleSelect } from "@/components/style-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +33,13 @@ const ORIENTATIONS = [
 
 const COUNTS = ["1", "2", "3", "4"] as const;
 
+// Kontext guidance presets: how strongly the prompt pulls away from the reference.
+const GUIDANCES = [
+  { value: "1.8", label: "Close to reference" },
+  { value: "2.5", label: "Balanced edit" },
+  { value: "3.5", label: "Strong change" },
+] as const;
+
 export default function ImagePage() {
   return (
     <Suspense fallback={null}>
@@ -42,6 +54,9 @@ function ImageStudio() {
   const [model, setModel] = useState("");
   const [count, setCount] = useState<string>("1");
   const [lora, setLora] = useState("");
+  const [loraScale, setLoraScale] = useState("1.0");
+  const [image, setImage] = useState<File | null>(null);
+  const [guidance, setGuidance] = useState<string>("2.5");
   const [jobId, setJobId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -51,6 +66,8 @@ function ImageStudio() {
   // the queue takes more submissions while a job runs — only lock during the POST
   const busy = submitting;
   const cost = imageCost(model, Number(count));
+  // Kontext edits an existing image — a reference upload is required.
+  const needsReference = model === "flux-kontext";
 
   const terminalNotified = useRef<string | null>(null);
   useEffect(() => {
@@ -61,7 +78,7 @@ function ImageStudio() {
   }, [jobId, status]);
 
   const handleSubmit = async () => {
-    if (!prompt.trim() || busy) return;
+    if (!prompt.trim() || busy || (needsReference && !image)) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -72,6 +89,9 @@ function ImageStudio() {
         count: Number(count),
         // styles are trained on (and only apply to) the Wan2.2 5B engine
         lora: model === "wan-5b" ? lora || undefined : undefined,
+        loraScale: model === "wan-5b" && lora ? Number(loraScale) : undefined,
+        image: needsReference ? image : undefined,
+        guidance: needsReference ? Number(guidance) : undefined,
       });
       setJobId(response.jobId);
       setPrompt("");
@@ -95,18 +115,32 @@ function ImageStudio() {
       />
 
       <StudioComposer>
-        <Textarea
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-          placeholder="Describe the image… e.g. a cozy study with warm lamplight, bookshelves, photorealistic"
-          className="max-h-48 min-h-16 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
-          disabled={busy}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-              void handleSubmit();
+        <div className="flex items-start gap-3">
+          {needsReference && (
+            <ComposerAttach
+              label="Reference image (the character/subject to edit)"
+              file={image}
+              onChange={setImage}
+              disabled={busy}
+            />
+          )}
+          <Textarea
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            placeholder={
+              needsReference
+                ? "Describe the change… e.g. show this character from behind, doing pull-ups on a street bar"
+                : "Describe the image… e.g. a cozy study with warm lamplight, bookshelves, photorealistic"
             }
-          }}
-        />
+            className="max-h-48 min-h-16 flex-1 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+            disabled={busy}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                void handleSubmit();
+              }
+            }}
+          />
+        </div>
         {submitError && (
           <Alert variant="destructive" className="mb-2">
             <AlertDescription>{submitError}</AlertDescription>
@@ -162,13 +196,39 @@ function ImageStudio() {
           </ComposerControl>
           <div className="ml-auto flex items-center gap-2">
             {model === "wan-5b" && (
-              <StyleSelect value={lora} onChange={setLora} disabled={busy} tile />
+              <>
+                <StyleSelect value={lora} onChange={setLora} disabled={busy} tile />
+                {lora && (
+                  <StyleScaleSelect value={loraScale} onChange={setLoraScale} disabled={busy} />
+                )}
+              </>
+            )}
+            {needsReference && (
+              <Select
+                value={guidance}
+                onValueChange={(value) => {
+                  if (value !== null) setGuidance(value);
+                }}
+                disabled={busy}
+                items={Object.fromEntries(GUIDANCES.map((g) => [g.value, g.label]))}
+              >
+                <SelectTrigger size="sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {GUIDANCES.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
             <Button
               size="lg"
               className="rounded-lg font-mono text-xs uppercase tracking-widest"
               onClick={handleSubmit}
-              disabled={busy || !prompt.trim()}
+              disabled={busy || !prompt.trim() || (needsReference && !image)}
             >
               {busy ? "Generating…" : `Generate · ${cost} cr`}
             </Button>

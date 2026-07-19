@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import Settings, get_settings
 from app.logging_config import setup_logging
+from app.pipelines.flux_kontext_pipeline import FluxKontextPipeline
 from app.pipelines.flux_pipeline import FluxPipeline
 from app.pipelines.manager import ModelManager
 from app.pipelines.musetalk_pipeline import MuseTalkPipeline
@@ -52,6 +53,10 @@ def build_model_manager(settings: Settings) -> ModelManager:
         FluxPipeline(
             settings.models_dir / "flux.1-schnell",
             offload_policy=settings.flux_offload,
+        ),
+        FluxKontextPipeline(
+            settings.models_dir / "flux.1-kontext-dev",
+            offload_policy=settings.kontext_offload,
         ),
         UpscalePipeline(
             settings.models_dir / "realesrgan",
